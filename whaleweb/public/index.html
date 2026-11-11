@@ -344,6 +344,17 @@
     } catch {}
   }
 
+  function stickerText(s) {
+    const name = (s.name || s.id || '').trim()
+    const emo = (s.emotion || '').trim()
+    const desc = (s.desc || '').trim()
+    const text = (s.text || '').trim()
+    let out = '[表情' + (name ? '：' + name : '') + (emo ? '（' + emo + '）' : '') + ']'
+    if (desc) out += ' ' + desc
+    if (text) out += '（图上有字：' + text + '）'
+    return out
+  }
+
   function sendSticker(s) {
     $('sticker-panel').classList.add('hidden')
     const row = document.createElement('div')
@@ -356,6 +367,8 @@
     row.appendChild(b)
     msgs.appendChild(row)
     msgs.scrollTop = msgs.scrollHeight
+    const say = stickerText(s)
+    if (say) deliver(say)
   }
 
   $('sticker-btn').onclick = () => {

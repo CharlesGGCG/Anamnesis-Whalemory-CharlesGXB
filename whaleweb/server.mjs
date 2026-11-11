@@ -63,13 +63,19 @@ const STICKER_BASE = String(cfg.stickerBase || 'http://127.0.0.1:3080/x-nekowhal
 let stickerList = []
 try {
   const cat = JSON.parse(fs.readFileSync(STICKER_CATALOG, 'utf8'))
-  stickerList = (Array.isArray(cat.stickers) ? cat.stickers : []).map((s) => ({
-    id: String((s.id || '').split('/').pop() || s.id),
-    hash: String(s.hash || ''),
-    emotion: String(s.emotion || ''),
-    tags: Array.isArray(s.tags) ? s.tags.slice(0, 6) : [],
-    text: String(s.text || ''),
-  })).filter((s) => s.hash)
+  stickerList = (Array.isArray(cat.stickers) ? cat.stickers : []).map((s) => {
+    const stem = String((s.id || '').split('/').pop() || s.id)
+    const code = stem.split('_')[0]
+    return {
+      id: stem,
+      name: stem.slice(code.length + 1) || stem,
+      hash: String(s.hash || ''),
+      emotion: String(s.emotion || ''),
+      tags: Array.isArray(s.tags) ? s.tags.slice(0, 6) : [],
+      text: String(s.text || ''),
+      desc: String(s.desc || ''),
+    }
+  }).filter((s) => s.hash)
 } catch { stickerList = [] }
 
 function parseCookies(req) {
