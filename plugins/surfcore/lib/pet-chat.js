@@ -123,7 +123,7 @@ export function intimacyTone(intimacy) {
  * 用户消息和她的回复分开写：插件摄取时会把回复并进最近一条 pet-owner 记录，
  * 形成「主人说 → 她回」的一条记忆。
  */
-export function buildPetMemoryEvents({ userText = '', replyText = '', at = Date.now(), roleName = '' } = {}) {
+export function buildPetMemoryEvents({ userText = '', replyText = '', at = Date.now(), roleName = '', sender = '主人', isOwner = true } = {}) {
   const events = [];
   const say = String(userText ?? '').trim();
   const reply = String(replyText ?? '').trim();
@@ -132,8 +132,8 @@ export function buildPetMemoryEvents({ userText = '', replyText = '', at = Date.
       at: at - 1,
       platform: 'pet',
       kind: 'private',
-      sender: '主人',
-      isOwner: true,
+      sender: String(sender || '主人').slice(0, 40),
+      isOwner: isOwner === true,
       private: true,
       direct: true,
       conversationKey: 'pet',
@@ -882,6 +882,8 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
         replyText: reply,
         at: now,
         roleName: role.name,
+        sender: who === 'guest' ? '访客' : '主人',
+        isOwner: who !== 'guest',
       }));
       bumpIntimacy(who);
       lastChatAt = now;
