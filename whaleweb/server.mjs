@@ -94,6 +94,34 @@ function resolveStickerRef(ref) {
   return { hash: s.hash, name: s.name, emotion: s.emotion, text: s.text }
 }
 
+// 把 `[动作:伸懒腰]` 派给 Live2D 工作台：编排 → 校验 → 播放（fire-and-forget，不阻塞聊天）。
+const L2D_BASE = 'http://127.0.0.1:61945'
+async function triggerLive2DAction(action) {
+  const a = String(action || '').trim().slice(0, 24)
+  if (!a) return
+  try {
+    const r1 = await fetch(`${L2D_BASE}/api/planner/run`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt: a }),
+    })
+    const j1 = await r1.json()
+    const taskId = j1?.id || j1?.taskId || j1?.task?.id
+    if (!taskId) return
+    for (let i = 0; i < 60; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      const st = await fetch(`${L2D_BASE}/api/planner/state`).then((r) => r.json()).catch(() => null)
+      const task = (st?.tasks || []).find((t) => String(t.id) === String(taskId))
+      if (!task) continue
+      if (task.status === 'validated') {
+        await fetch(`${L2D_BASE}/api/planner/execute`, {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId }),
+        }).catch(() => {})
+        return
+      }
+      if (['cancelled', 'failed', 'error'].includes(task.status)) return
+    }
+  } catch {}
+}
+
 // 左栏「她看视频」：观看队列 + 最近观看历史（读 DSH 状态目录）。
 const STATE_DIR = String(cfg.stateDir || '').trim() || path.dirname(path.dirname(HOST_FILE))
 const WATCH_QUEUE = String(cfg.watchQueue || '').trim() || path.join(STATE_DIR, 'pet', 'watch-queue.json')
@@ -216,6 +244,9 @@ const server = http.createServer(async (req, res) => {
       const sticker = resolveStickerRef(r.reply.stickerRef)
       if (sticker) r.reply.sticker = sticker
       delete r.reply.stickerRef
+      const action = String(r.reply.action || '').trim()
+      delete r.reply.action
+      if (action && id === 'owner') triggerLive2DAction(action)
     }
     return send(res, r.ok ? 200 : 502, r)
   }

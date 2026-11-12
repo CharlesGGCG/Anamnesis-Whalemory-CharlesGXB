@@ -110,6 +110,17 @@ export function extractSticker(text) {
   return { text: raw.replace(STICKER_MARK, ''), ref: m[1].trim() };
 }
 
+/** 模型主动带动作的标记：`[动作:伸懒腰]`（给 Live2D 桌宠做动作）。 */
+const ACTION_MARK = /\[动作:([^\]\n]{1,24})\]/iu;
+
+/** 从模型原文拆出动作标记，返回 { text, ref }（text 已去掉标记）。 */
+export function extractAction(text) {
+  const raw = String(text ?? '');
+  const m = ACTION_MARK.exec(raw);
+  if (!m) return { text: raw, ref: '' };
+  return { text: raw.replace(ACTION_MARK, ''), ref: m[1].trim() };
+}
+
 /** 亲密度 → 语气建议（写进 system prompt，让她的口吻随关系变化）。 */
 export function intimacyTone(intimacy) {
   const n = Number(intimacy);
@@ -452,6 +463,7 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
     };
     if (message.proactive) out.proactive = true;
     if (message.stickerRef) out.stickerRef = message.stickerRef;
+    if (message.action) out.action = message.action;
     if (message.audioKey) {
       const file = path.join(voiceDir, `${message.audioKey}.wav`);
       try {
@@ -797,6 +809,7 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
     lines.push('- 他说短句、发表情、只叫你的名字时，就自然地接一句，不用追问一大串。');
     if (web) {
       lines.push('- 你可以在回复末尾偶尔加一个表情标记来表达情绪，格式 `[sticker:情绪或名字]`，例如开心就写 `[sticker:开心]`；隔几句话加一次就好，别每句都加，也别解释这个标记。');
+      lines.push('- 你也可以在回复末尾加一个动作标记，让桌宠配合做动作，格式 `[动作:简短动作]`，例如 `[动作:伸懒腰]`、`[动作:歪头]`、`[动作:眨眼]`；动作要是她此刻能做的小动作（头部/身体小幅、表情、眨眼、抚胸、竖指、持草），2~6 个字，别解释、别每句都加。');
     }
     return lines.join('\n');
   }
@@ -856,9 +869,10 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
         temperature: s.chat.temperature,
       });
       recordUsage(result.usage, result.model);
-      // 先拆表情标记，再清洗正文，避免标记被 cleanReply/截断弄脏。
+      // 先拆表情/动作标记，再清洗正文，避免标记被 cleanReply/截断弄脏。
       const extracted = extractSticker(result.text);
-      let reply = cleanReply(extracted.text);
+      const actionExtracted = extractAction(extracted.text);
+      let reply = cleanReply(actionExtracted.text);
       if (!reply) return { ok: false, error: '她这次没说话（模型返回空）' };
       if (mode === 'voice') reply = clipForVoice(stripStageDirections(reply), s.chat.voiceMaxChars);
       else reply = clip(reply, s.chat.maxReplyChars);
@@ -867,6 +881,7 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
       const userMessage = { id: `u-${now}-${tokenHash(say).slice(0, 6)}`, role: 'user', text: say, modality: mode, at: now };
       const aiMessage = { id: `a-${now}-${tokenHash(reply).slice(0, 6)}`, role: 'assistant', text: reply, modality: mode, at: now };
       if (web && extracted.ref) aiMessage.stickerRef = extracted.ref;
+      if (web && actionExtracted.ref) aiMessage.action = actionExtracted.ref;
       if (mode === 'voice') {
         const tts = await synthesize(reply);
         if (tts.ok) {
@@ -914,6 +929,7 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
           usage: result.usage ?? null,
           latencyMs,
           stickerRef: extracted.ref || '',
+          action: actionExtracted.ref || '',
           system,
           user,
           raw: result.text,
