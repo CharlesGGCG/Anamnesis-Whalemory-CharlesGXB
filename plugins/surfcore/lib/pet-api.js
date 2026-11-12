@@ -135,7 +135,8 @@ export function createPetApiService({ chat, purpose, petService, stateDir, curre
     }
     if (req.method === 'GET' && suffix === '/history') {
       const limit = Number(url.searchParams.get('limit')) || 60;
-      json(res, 200, chat.history(limit));
+      const identity = url.searchParams.get('identity') === 'guest' ? 'guest' : 'owner';
+      json(res, 200, chat.history(limit, identity));
       return;
     }
     // 目的机制（桌宠载体）的只读状态 / 预览 / 手动出发。
@@ -160,7 +161,13 @@ export function createPetApiService({ chat, purpose, petService, stateDir, curre
     if (req.method === 'POST' && suffix === '/chat') {
       let body = {};
       try { body = JSON.parse((await readBody(req, PET_BODY_LIMIT)) || '{}'); } catch { json(res, 400, { ok: false, error: '请求体不是合法 JSON' }); return; }
-      const result = await chat.chat({ text: body.text, modality: body.modality });
+      const result = await chat.chat({
+        text: body.text,
+        modality: body.modality,
+        identity: body.identity === 'guest' ? 'guest' : 'owner',
+        web: body.web === true,
+        debug: body.debug === true,
+      });
       json(res, result.ok ? 200 : 400, result);
       return;
     }

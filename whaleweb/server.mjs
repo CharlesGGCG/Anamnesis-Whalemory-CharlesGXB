@@ -10,9 +10,11 @@ const HOME = os.homedir()
 
 const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8'))
 const PORT = Number(cfg.port) || 8787
-const INVITE = String(cfg.inviteCode || '')
+const INVITE = String(cfg.inviteCode || '').trim()
+const DEV_INVITE = String(cfg.devInviteCode || '').trim()
 const COOKIE = 'ww_invite'
-const COOKIE_VAL = crypto.createHash('sha256').update(INVITE).digest('hex')
+const VAL_GUEST = crypto.createHash('sha256').update(INVITE).digest('hex')
+const VAL_OWNER = DEV_INVITE ? crypto.createHash('sha256').update(DEV_INVITE).digest('hex') : ''
 
 const HOST_FILE = String(cfg.hostFile || '').trim() || path.join(HOME, '.dsh', 'surfcore', 'pet', 'host.json')
 function readHost() {
@@ -26,14 +28,14 @@ function readHost() {
   } catch { return null }
 }
 
-async function petChat(text) {
+async function petChat(text, identity = 'guest') {
   const h = readHost()
   if (!h || !h.token) return { ok: false, error: '她还没准备好（本机服务未就绪）' }
   try {
     const r = await fetch(`${h.baseUrl}${h.api}/chat`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-pet-token': h.token },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, identity, web: true, debug: identity === 'owner' }),
     })
     return await r.json()
   } catch (e) { return { ok: false, error: String(e.message) } }
@@ -48,11 +50,11 @@ async function petStatus() {
   } catch { return { ok: false, online: false } }
 }
 
-async function petHistory(limit = 60) {
+async function petHistory(limit = 60, identity = 'guest') {
   const h = readHost()
   if (!h || !h.token) return { ok: false, messages: [] }
   try {
-    const r = await fetch(`${h.baseUrl}${h.api}/history?limit=${limit}`, { headers: { 'x-pet-token': h.token } })
+    const r = await fetch(`${h.baseUrl}${h.api}/history?limit=${limit}&identity=${identity}`, { headers: { 'x-pet-token': h.token } })
     return await r.json()
   } catch { return { ok: false, messages: [] } }
 }
@@ -78,6 +80,19 @@ try {
   }).filter((s) => s.hash)
 } catch { stickerList = [] }
 
+// 把模型主动给出的 `[sticker:名字或情绪]` 解析成一张具体表情（名字精确、情绪随机抽）。
+function resolveStickerRef(ref) {
+  const r = String(ref || '').trim()
+  if (!r) return null
+  let s = stickerList.find((x) => x.name === r) || stickerList.find((x) => x.id === r)
+  if (!s) {
+    const pool = stickerList.filter((x) => x.emotion === r)
+    if (pool.length) s = pool[Math.floor(Math.random() * pool.length)]
+  }
+  if (!s) return null
+  return { hash: s.hash, name: s.name, emotion: s.emotion, text: s.text }
+}
+
 function parseCookies(req) {
   const out = {}
   const c = req.headers.cookie || ''
@@ -87,8 +102,14 @@ function parseCookies(req) {
   }
   return out
 }
+function identityOf(req) {
+  const v = parseCookies(req)[COOKIE]
+  if (DEV_INVITE && v === VAL_OWNER) return 'owner'
+  if (INVITE && v === VAL_GUEST) return 'guest'
+  return ''
+}
 function authorized(req) {
-  return parseCookies(req)[COOKIE] === COOKIE_VAL
+  return identityOf(req) !== ''
 }
 
 function send(res, code, body, type = 'application/json; charset=utf-8') {
@@ -108,25 +129,36 @@ const server = http.createServer(async (req, res) => {
     for await (const chunk of req) body += chunk
     let code = ''
     try { code = String(JSON.parse(body).code || '') } catch {}
-    if (code && code === INVITE) {
-      res.setHeader('Set-Cookie', `${COOKIE}=${COOKIE_VAL}; Path=/; HttpOnly; Max-Age=${90 * 24 * 3600}; SameSite=Lax`)
-      return send(res, 200, { ok: true })
+    let val = ''
+    let identity = ''
+    if (DEV_INVITE && code === DEV_INVITE) { val = VAL_OWNER; identity = 'owner' }
+    else if (code && code === INVITE) { val = VAL_GUEST; identity = 'guest' }
+    if (val) {
+      res.setHeader('Set-Cookie', `${COOKIE}=${val}; Path=/; HttpOnly; Max-Age=${90 * 24 * 3600}; SameSite=Lax`)
+      return send(res, 200, { ok: true, identity })
     }
     return send(res, 401, { ok: false, error: '邀请码不对' })
   }
 
   if (p === '/api/auth') {
-    return send(res, 200, { authorized: authorized(req) })
+    const id = identityOf(req)
+    return send(res, 200, { authorized: id !== '', identity: id, dev: id === 'owner' })
   }
 
   if (p === '/api/chat') {
-    if (!authorized(req)) return send(res, 401, { ok: false, error: '请先输入邀请码' })
+    const id = identityOf(req)
+    if (!id) return send(res, 401, { ok: false, error: '请先输入邀请码' })
     let body = ''
     for await (const chunk of req) body += chunk
     let text = ''
     try { text = String(JSON.parse(body).text || '') } catch {}
     if (!text.trim()) return send(res, 400, { ok: false, error: '空消息' })
-    const r = await petChat(text)
+    const r = await petChat(text, id)
+    if (r.ok && r.reply) {
+      const sticker = resolveStickerRef(r.reply.stickerRef)
+      if (sticker) r.reply.sticker = sticker
+      delete r.reply.stickerRef
+    }
     return send(res, r.ok ? 200 : 502, r)
   }
 
@@ -136,9 +168,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (p === '/api/history') {
-    if (!authorized(req)) return send(res, 401, { ok: false, error: '请先输入邀请码' })
+    const id = identityOf(req)
+    if (!id) return send(res, 401, { ok: false, error: '请先输入邀请码' })
     const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit')) || 60))
-    return send(res, 200, await petHistory(limit))
+    return send(res, 200, await petHistory(limit, id))
   }
 
   if (p === '/api/stickers') {
@@ -162,9 +195,16 @@ const server = http.createServer(async (req, res) => {
 
   if (p === '/') {
     // 支持直接带邀请码的链接：/?invite=CODE 自动放行
-    if (url.searchParams.get('invite') === INVITE && INVITE) {
-      res.setHeader('Set-Cookie', `${COOKIE}=${COOKIE_VAL}; Path=/; HttpOnly; Max-Age=${90 * 24 * 3600}; SameSite=Lax`)
+    const q = url.searchParams.get('invite')
+    if (q) {
+      let val = ''
+      if (DEV_INVITE && q === DEV_INVITE) val = VAL_OWNER
+      else if (INVITE && q === INVITE) val = VAL_GUEST
+      if (val) {
+        res.setHeader('Set-Cookie', `${COOKIE}=${val}; Path=/; HttpOnly; Max-Age=${90 * 24 * 3600}; SameSite=Lax`)
+      }
     }
+    res.setHeader('Cache-Control', 'no-store')
     return send(res, 200, indexHtml, 'text/html; charset=utf-8')
   }
 

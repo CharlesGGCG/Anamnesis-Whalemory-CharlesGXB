@@ -126,6 +126,30 @@
   .sticker-panel .st:hover { background: var(--accent-soft); outline: 2px solid var(--accent); }
   .bubble.img { padding: 4px; }
   .bubble.img img { max-width: 180px; max-height: 180px; border-radius: 10px; display: block; }
+  .bubble .her-sticker { max-width: 160px; max-height: 160px; border-radius: 10px; display: block; margin-bottom: 6px; }
+
+  /* —— 开发者思考后台 —— */
+  .dev-btn {
+    margin-left: auto; width: 38px; height: 38px; flex-shrink: 0; border: 1px solid var(--border);
+    background: var(--bg); border-radius: 12px; font-size: 17px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; padding: 0; color: var(--ink-2);
+    transition: background .15s, border-color .15s;
+  }
+  .dev-btn:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .dev-panel {
+    border-bottom: 1px solid #333; background: #1F1E1D; color: #EAE6DF;
+    padding: 14px 18px; max-height: 46vh; overflow-y: auto; font-size: 12px; line-height: 1.6;
+  }
+  .dev-panel .dev-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .dev-panel .dev-head b { color: #F0B9A0; font-size: 13px; }
+  .dev-panel .dev-head button { background: transparent; border: 1px solid #444; color: #ccc; border-radius: 8px; width: 26px; height: 26px; cursor: pointer; }
+  .dev-panel h4 { color: #F0B9A0; margin: 12px 0 4px; font-size: 12px; font-weight: 600; }
+  .dev-panel pre {
+    white-space: pre-wrap; word-break: break-word; margin: 0; color: #D8D2C6;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
+  }
+  .dev-kv { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+  .dev-kv span { color: #A9E0B8; }
 
   @media (max-width: 560px) {
     .chat { max-width: 100%; }
@@ -159,7 +183,12 @@
         <h1>小鲸鱼</h1>
         <div class="status"><span class="dot" id="dot"></span><span id="status-text">……</span></div>
       </div>
+      <button id="dev-btn" class="dev-btn hidden" title="思考后台">🧠</button>
     </header>
+    <div id="dev-panel" class="dev-panel hidden">
+      <div class="dev-head"><b>🧠 思考后台</b><button id="dev-close">×</button></div>
+      <div id="dev-body"></div>
+    </div>
     <main id="msgs"></main>
     <footer>
       <button id="sticker-btn" class="sticker-btn" title="表情包">🐋</button>
@@ -251,9 +280,13 @@
     }
   }
 
+  let devMode = false
+  let identity = 'guest'
+
   async function enterChat() {
     $('gate').classList.add('hidden')
     $('chat').classList.remove('hidden')
+    if (devMode) $('dev-btn').classList.remove('hidden')
     loadHistory()
     pollStatus()
   }
@@ -278,7 +311,11 @@
   async function init() {
     try {
       const r = await fetch('/api/auth').then(r => r.json())
-      if (r && r.authorized) { enterChat() } else { $('gate').classList.remove('hidden') }
+      if (r && r.authorized) {
+        devMode = !!(r && r.dev)
+        identity = (r && r.identity) || 'guest'
+        enterChat()
+      } else { $('gate').classList.remove('hidden') }
     } catch { $('gate').classList.remove('hidden') }
   }
 
@@ -308,6 +345,75 @@
     $('input').style.height = Math.min($('input').scrollHeight, 140) + 'px'
   })
 
+  function addHerBubble(reply) {
+    const row = document.createElement('div')
+    row.className = 'row her'
+    const av = document.createElement('img')
+    av.className = 'avatar'; av.src = '/avatar.png'; av.alt = '🐋'
+    row.appendChild(av)
+    const b = document.createElement('div')
+    b.className = 'bubble'
+    if (reply.sticker && reply.sticker.hash) {
+      const img = document.createElement('img')
+      img.className = 'her-sticker'
+      img.src = '/s/' + reply.sticker.hash + '.gif'
+      img.alt = reply.sticker.name || '表情'
+      b.appendChild(img)
+    }
+    if (reply.text) {
+      const t = document.createElement('span')
+      t.textContent = reply.text
+      b.appendChild(t)
+    }
+    row.appendChild(b)
+    msgs.appendChild(row)
+    msgs.scrollTop = msgs.scrollHeight
+    return row
+  }
+
+  function showDebug(d, r) {
+    const body = $('dev-body')
+    body.innerHTML = ''
+    const kv = document.createElement('div')
+    kv.className = 'dev-kv'
+    let usageTxt = '-'
+    if (d.usage) {
+      const u = d.usage
+      const inT = u.inputTokens ?? u.promptTokens ?? u.input_tokens ?? u.prompt_tokens
+      const outT = u.outputTokens ?? u.completionTokens ?? u.output_tokens ?? u.completion_tokens
+      if (inT != null || outT != null) usageTxt = '入 ' + (inT ?? '?') + ' / 出 ' + (outT ?? '?')
+      else usageTxt = JSON.stringify(u)
+    }
+    const items = [
+      '身份：' + (d.identity === 'guest' ? '访客' : '主人'),
+      '亲密度：' + d.intimacy,
+      '模型：' + (d.model || '-'),
+      '耗时：' + (d.latencyMs != null ? d.latencyMs + 'ms' : '-'),
+      'token：' + usageTxt,
+      '表情：' + (d.stickerRef || '无'),
+      '记忆写入：' + (r.remembered != null ? r.remembered : '-'),
+    ]
+    for (const it of items) {
+      const s = document.createElement('span')
+      s.textContent = it
+      kv.appendChild(s)
+    }
+    body.appendChild(kv)
+    const addSection = (title, content) => {
+      const h = document.createElement('h4')
+      h.textContent = title
+      body.appendChild(h)
+      const pre = document.createElement('pre')
+      pre.textContent = content || '（空）'
+      body.appendChild(pre)
+    }
+    addSection('系统提示词', d.system)
+    addSection('发给模型', d.user)
+    addSection('原始回复', d.raw)
+    addSection('记忆块', d.memory)
+    if (d.purpose) addSection('目的状态', JSON.stringify(d.purpose, null, 1))
+  }
+
   async function deliver(text) {
     setThinking(true)
     $('send').disabled = true
@@ -315,7 +421,8 @@
       const r = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) }).then(r => r.json())
       setThinking(false)
       if (r && r.ok && r.reply) {
-        addBubble('her', r.reply.text)
+        addHerBubble(r.reply)
+        if (devMode && r.debug) showDebug(r.debug, r)
       } else {
         addError(text, (r && r.error) || '她好像走神了')
       }
@@ -376,6 +483,9 @@
     panel.classList.toggle('hidden')
     if (!stickers.length) loadStickers()
   }
+
+  $('dev-btn').onclick = () => $('dev-panel').classList.toggle('hidden')
+  $('dev-close').onclick = () => $('dev-panel').classList.add('hidden')
 
   init()
 </script>
