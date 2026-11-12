@@ -6,6 +6,7 @@
 
 | 日期 | 案例 | 一句话 | 版本 |
 | --- | --- | --- | --- |
+| 2026-11-11 | [whaleweb 三栏 Claude 风 UI + 深/浅主题 + 她看视频 + 观看队列](2026-11-11-whaleweb-three-column-claude-theme.md) | 左栏看视频/进程、中间窄聊天、右栏思考后台；Claude 配色深/浅切换；/api/watch 加 BV 号 | 待发布 |
 | 2026-11-11 | [whaleweb 主动发表情 + 开发者模式 + 身份→亲密度](2026-11-11-whaleweb-proactive-sticker-dev-mode.md) | 她按 `[sticker:…]` 主动甩表情；双邀请码分主人/访客；亲密度改语气；开发者看思考后台 | 待发布 |
 | 2026-11-11 | [whaleweb 发表情但鲸鱼读不到](2026-11-11-whaleweb-sticker-read.md) | 发表情只本地回显、未投递给模型 → 转文字描述 deliver | 待发布 |
 | 2026-11-06 | [多模型重建索引（本地/云端多选）](2026-11-06-multi-model-index-picker.md) | 弹窗多选；已有索引标注；本地走 runtime、云端直连；不改 active provider | 待发布 |
