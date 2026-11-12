@@ -93,6 +93,63 @@ function resolveStickerRef(ref) {
   return { hash: s.hash, name: s.name, emotion: s.emotion, text: s.text }
 }
 
+// 左栏「她看视频」：观看队列 + 最近观看历史（读 DSH 状态目录）。
+const STATE_DIR = String(cfg.stateDir || '').trim() || path.dirname(path.dirname(HOST_FILE))
+const WATCH_QUEUE = String(cfg.watchQueue || '').trim() || path.join(STATE_DIR, 'pet', 'watch-queue.json')
+
+function readWatchQueue() {
+  try {
+    const j = JSON.parse(fs.readFileSync(WATCH_QUEUE, 'utf8'))
+    return Array.isArray(j && j.items) ? j.items : []
+  } catch { return [] }
+}
+
+function writeWatchQueue(items) {
+  try {
+    fs.mkdirSync(path.dirname(WATCH_QUEUE), { recursive: true })
+    const tmp = `${WATCH_QUEUE}.${process.pid}.tmp`
+    fs.writeFileSync(tmp, JSON.stringify({ items }, null, 2), 'utf8')
+    fs.renameSync(tmp, WATCH_QUEUE)
+  } catch {}
+}
+
+// 尽量从 B站 公开接口补标题/UP/时长；失败就退回只存 BV 号。
+async function biliMeta(bvid) {
+  try {
+    const r = await fetch(`https://api.bilibili.com/x/web-interface/view?bvid=${encodeURIComponent(bvid)}`)
+    const j = await r.json()
+    if (j && j.code === 0 && j.data) {
+      return {
+        title: String(j.data.title || '').trim(),
+        up: String(j.data.owner?.name || '').trim(),
+        duration: Number(j.data.duration) || 0,
+        pic: String(j.data.pic || '').trim(),
+      }
+    }
+  } catch {}
+  return null
+}
+
+function readWatchHistory(limit = 12) {
+  const base = path.join(STATE_DIR, 'characters')
+  let target = ''
+  let mt = 0
+  try {
+    for (const d of fs.readdirSync(base)) {
+      const f = path.join(base, d, 'bili', 'watch-history.jsonl')
+      try {
+        const s = fs.statSync(f)
+        if (s.mtimeMs > mt) { mt = s.mtimeMs; target = f }
+      } catch {}
+    }
+  } catch {}
+  if (!target) return []
+  try {
+    const lines = fs.readFileSync(target, 'utf8').trim().split('\n').filter(Boolean)
+    return lines.slice(-limit).map((l) => { try { return JSON.parse(l) } catch { return null } }).filter(Boolean).reverse()
+  } catch { return [] }
+}
+
 function parseCookies(req) {
   const out = {}
   const c = req.headers.cookie || ''
@@ -177,6 +234,37 @@ const server = http.createServer(async (req, res) => {
   if (p === '/api/stickers') {
     if (!authorized(req)) return send(res, 401, { ok: false, error: '请先输入邀请码' })
     return send(res, 200, { ok: true, count: stickerList.length, stickers: stickerList })
+  }
+
+  if (p === '/api/activity') {
+    const id = identityOf(req)
+    if (!id) return send(res, 401, { ok: false, error: '请先输入邀请码' })
+    const out = { ok: true, history: readWatchHistory(12) }
+    if (id === 'owner') {
+      out.queue = readWatchQueue()
+      try { out.status = await petStatus() } catch { out.status = { ok: false } }
+    }
+    return send(res, 200, out)
+  }
+
+  if (p === '/api/watch') {
+    if (identityOf(req) !== 'owner') return send(res, 403, { ok: false, error: '只有主人能加视频' })
+    if (req.method !== 'POST') return send(res, 405, { ok: false, error: 'method' })
+    let body = ''
+    for await (const chunk of req) body += chunk
+    let bvid = ''
+    try { bvid = String(JSON.parse(body).bvid || '').trim() } catch {}
+    bvid = (bvid.match(/BV[0-9A-Za-z]{10}/) || [bvid])[0]
+    if (!/^BV[0-9A-Za-z]{10}$/.test(bvid)) return send(res, 400, { ok: false, error: '请输入正确的 BV 号（如 BV1St4Y6jEkc）' })
+    const items = readWatchQueue()
+    let item = items.find((x) => x.bvid === bvid)
+    if (!item) {
+      const meta = await biliMeta(bvid)
+      item = { bvid, title: meta?.title || bvid, up: meta?.up || '', duration: meta?.duration || 0, pic: meta?.pic || '', addedAt: new Date().toISOString(), status: 'queued' }
+      items.push(item)
+      writeWatchQueue(items)
+    }
+    return send(res, 200, { ok: true, count: items.length, item })
   }
 
   if (p.startsWith('/s/')) {
