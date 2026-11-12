@@ -176,6 +176,7 @@
   .bubble.img { padding: 4px; }
   .bubble.img img { max-width: 180px; max-height: 180px; border-radius: 10px; display: block; }
   .bubble .her-sticker { max-width: 150px; max-height: 150px; border-radius: 10px; display: block; margin-bottom: 6px; }
+  .bubble .action-tag { color: var(--ink-3); font-size: 0.86em; margin-left: 3px; }
 
   footer {
     padding: 12px 22px 16px; background: var(--canvas); border-top: 1px solid var(--divider);
@@ -359,6 +360,12 @@
       const t = document.createElement('span')
       t.textContent = reply.text
       b.appendChild(t)
+    }
+    if (reply.action) {
+      const a = document.createElement('span')
+      a.className = 'action-tag'
+      a.textContent = '（' + reply.action + '）'
+      b.appendChild(a)
     }
     row.appendChild(b)
     msgs.appendChild(row)

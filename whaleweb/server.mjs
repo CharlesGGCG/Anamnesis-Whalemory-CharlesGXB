@@ -259,8 +259,8 @@ const server = http.createServer(async (req, res) => {
       if (sticker) r.reply.sticker = sticker
       delete r.reply.stickerRef
       const action = String(r.reply.action || '').trim()
-      delete r.reply.action
       if (action && id === 'owner') triggerLive2DAction(action)
+      // action 保留在 reply 里，前端把动作显示成括号注记
     }
     return send(res, r.ok ? 200 : 502, r)
   }
