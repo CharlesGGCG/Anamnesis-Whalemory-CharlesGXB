@@ -284,8 +284,15 @@ const server = http.createServer(async (req, res) => {
       delete headers.cookie
       delete headers['content-length']
       const r = await fetch(target, { method: req.method, headers, body, redirect: 'manual' })
-      const buf = Buffer.from(await r.arrayBuffer())
-      const outHeaders = { 'content-type': r.headers.get('content-type') || 'application/octet-stream' }
+      const ct = r.headers.get('content-type') || 'application/octet-stream'
+      let buf = Buffer.from(await r.arrayBuffer())
+      // 文本响应：把工作台的绝对路径 /model /data /api 等重写到 /l2d/ 前缀，并把 127.0.0.1:61945 去掉。
+      if (/text|javascript|json|svg|xml|wasm/.test(ct)) {
+        buf = Buffer.from(buf.toString('utf8')
+          .replace(/https?:\/\/127\.0\.0\.1:61945/g, '')
+          .replace(/(["'`])(\/(?:model|data|api|vendor|pet\.html|scene-experiment\.html|community\.html|lab\.html|stocking-study\.html))/g, '$1/l2d$2'), 'utf8')
+      }
+      const outHeaders = { 'content-type': ct }
       if (r.headers.get('location')) outHeaders.location = r.headers.get('location')
       res.writeHead(r.status, outHeaders)
       res.end(buf)
