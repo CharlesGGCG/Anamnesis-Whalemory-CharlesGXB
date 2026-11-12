@@ -55,6 +55,63 @@ function platformDir() {
   return activePlatformStateDir(path.join(dshHome, 'surfcore', 'bili'))
 }
 
+// ── 观看队列（whaleweb 左栏「加视频」写入）─────────────────────────────────
+// 她醒来时优先深读排队的视频；看完后（出现在 watch-history 里）自动标成 watched。
+function surfcoreRoot() {
+  const home = process.env.USERPROFILE || os.homedir()
+  const dshHome = process.env.DSH_HOME || path.join(home, '.dsh')
+  return path.join(dshHome, 'surfcore')
+}
+function watchQueueFile() {
+  return path.join(surfcoreRoot(), 'pet', 'watch-queue.json')
+}
+function readWatchQueue() {
+  try {
+    const j = JSON.parse(fs.readFileSync(watchQueueFile(), 'utf8'))
+    return Array.isArray(j && j.items) ? j.items : []
+  } catch { return [] }
+}
+function writeWatchQueue(items) {
+  try {
+    const f = watchQueueFile()
+    fs.mkdirSync(path.dirname(f), { recursive: true })
+    const tmp = `${f}.${process.pid}.tmp`
+    fs.writeFileSync(tmp, JSON.stringify({ items }, null, 2), 'utf8')
+    fs.renameSync(tmp, f)
+  } catch {}
+}
+function recentWatchedBvids(limit = 60) {
+  try {
+    const f = path.join(platformDir(), 'watch-history.jsonl')
+    const lines = fs.readFileSync(f, 'utf8').trim().split('\n').filter(Boolean)
+    return new Set(lines.slice(-limit).map((l) => { try { return JSON.parse(l).bvid } catch { return '' } }).filter(Boolean))
+  } catch { return new Set() }
+}
+function pendingWatchQueue() {
+  const items = readWatchQueue()
+  const watched = recentWatchedBvids()
+  let changed = false
+  for (const it of items) {
+    if (it.status === 'queued' && watched.has(it.bvid)) {
+      it.status = 'watched'
+      it.watchedAt = new Date().toISOString()
+      changed = true
+    }
+  }
+  if (changed) writeWatchQueue(items)
+  return items.filter((it) => it.status === 'queued')
+}
+function queuePromptLines() {
+  const pending = pendingWatchQueue()
+  if (!pending.length) return []
+  const list = pending.slice(0, 5).map((it) => `「${it.title || it.bvid}」${it.bvid}`).join('；')
+  const more = pending.length > 5 ? ` 等 ${pending.length} 条` : ''
+  return [
+    `0) ⭐ **待看队列（主人在网页上给你排的）**：${list}${more}。`,
+    '   优先深读这几条（照常 debrief，想看清画面再用 video_storyboard）；看完后队列会自动勾掉，不用你手动改文件。',
+  ]
+}
+
 // ── 合体后的统一上下文：一张人设卡 + 身份对齐 + QQ 脱敏记忆 ────────────────────
 // 旧版只注入 persona.name/ownerTitle/selfClaim 三行，B站这边其实看不到完整人设；
 // 合体后统一从当前人格卡（unified persona.file）取同一张卡，QQ 和 B站不再各活各的。
@@ -338,6 +395,7 @@ function wakePrompt(st, tools = '') {
     ...(SILENT
       ? ['⛔ **沉默逛 B 站已开启：本轮只看不说。** 只做 deps / feed / debrief / score / 日记；禁止评论、回复、搭话、发动态、分享、私信、弹幕；不要调用 comment / daily / share-dynamic / dynamic / dm / danmaku 的 --go。']
       : ['⭐ **本轮硬规则（2026-10-23 主人定）：至少发一条主动评论（见 4.7）；鱼群泛滥时强制聚拢，不许以“没有可聚拢鱼楼”跳过；额度/冷却满了除外。**']),
+    ...queuePromptLines(),
     '1) `node bili.mjs deps` —— 体检红着就报备我、只做读、别对外发',
     `2) 读两本日记（\`${path.join(biliDir, 'whale-diary.md')}\` + \`${path.join(biliDir, 'whale-diary-private.md')}\`）`,
     // 2026-10-20：feed 已默认多源（搜索+热门+排行+关注）+ 去播放量偏向 + 偏好命中权重 ✓
