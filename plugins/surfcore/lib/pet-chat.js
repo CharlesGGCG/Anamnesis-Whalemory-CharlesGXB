@@ -119,37 +119,39 @@ export function intimacyTone(intimacy) {
 }
 
 /**
- * 桌宠的一问一答 → 记忆卡 inbox 事件（和 QQ / B站 共用同一张卡、同一条遗忘曲线）。
- * 用户消息和她的回复分开写：插件摄取时会把回复并进最近一条 pet-owner 记录，
- * 形成「主人说 → 她回」的一条记忆。
+ * 桌宠 / 网页 的一问一答 → 记忆卡 inbox 事件（和 QQ / B站 共用同一张卡、同一条遗忘曲线）。
+ * 用户消息和她的回复分开写：插件摄取时会把回复并进最近一条记录，形成「他说 → 她回」的一条记忆。
+ * 网页端（web=true）按 QQ 私聊身份写入，统一进主人私聊 / 访客私聊；桌宠仍走 pet 平台。
  */
-export function buildPetMemoryEvents({ userText = '', replyText = '', at = Date.now(), roleName = '', sender = '主人', isOwner = true } = {}) {
+export function buildPetMemoryEvents({ userText = '', replyText = '', at = Date.now(), roleName = '', sender = '主人', isOwner = true, platform = 'pet', conversationKey = 'pet' } = {}) {
   const events = [];
   const say = String(userText ?? '').trim();
   const reply = String(replyText ?? '').trim();
+  const key = String(conversationKey || 'pet');
+  const plat = String(platform || 'pet');
   if (say) {
     events.push({
       at: at - 1,
-      platform: 'pet',
+      platform: plat,
       kind: 'private',
       sender: String(sender || '主人').slice(0, 40),
       isOwner: isOwner === true,
       private: true,
       direct: true,
-      conversationKey: 'pet',
+      conversationKey: key,
       text: say,
     });
   }
   if (reply) {
     events.push({
       at,
-      platform: 'pet',
+      platform: plat,
       kind: 'private',
       sender: String(roleName || '角色').slice(0, 40),
       isSelf: true,
       private: true,
       direct: true,
-      conversationKey: 'pet',
+      conversationKey: key,
       text: reply,
     });
   }
@@ -884,6 +886,10 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
         roleName: role.name,
         sender: who === 'guest' ? '访客' : '主人',
         isOwner: who !== 'guest',
+        platform: web ? 'qq' : 'pet',
+        conversationKey: web
+          ? (who === 'guest' ? 'private:web-guest' : (owner.qq ? `private:${owner.qq}` : 'private:owner'))
+          : 'pet',
       }));
       bumpIntimacy(who);
       lastChatAt = now;
