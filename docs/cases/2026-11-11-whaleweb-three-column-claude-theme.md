@@ -41,6 +41,7 @@
 
 ## 遗留 / 后续
 
-- **队列没接鲸鱼视频管线**：`watch-queue.json` 目前只是排队，还没让 scheduler/子代理自动消费（bili-scan / watch-video / video_storyboard），看完也没回写 status。
+- **队列已接生物钟**（后续提交 `9b68741`）：`scheduler.js` 醒来提示词注入「0) 待看队列」、看完（进 `watch-history.jsonl`）自动标 `watched`；但**还没实机验证一次真实 B站 醒来会不会优先消费队列**。
+- **两侧侧屏可拖拽调宽**（同一提交）：`resizer` 拖条 + `localStorage` 记忆，160~520px。
 - 访客亲密度是全体访客共享一个值，没有按具体访客分人。
 - 左栏「进程状态」目前只列桌宠/对话/模型/语音/专注，QQ 桥接与 B站 tick 还没接进来。
