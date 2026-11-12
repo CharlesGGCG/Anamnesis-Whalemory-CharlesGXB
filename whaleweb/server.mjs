@@ -2,6 +2,7 @@ import http from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
+import net from 'node:net'
 import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 
@@ -267,6 +268,31 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true, count: items.length, item })
   }
 
+  // Live2D 工作台代理（仅开发者）——把 127.0.0.1:61945 挂在 /l2d/ 下，走邀请码闸门。
+  if (p === '/l2d' || p.startsWith('/l2d/')) {
+    if (identityOf(req) !== 'owner') return send(res, 403, { ok: false, error: '只有开发者能访问 Live2D 工作台' })
+    const target = 'http://127.0.0.1:61945' + (p === '/l2d' ? '/' : p.slice('/l2d'.length))
+    try {
+      let body
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        const chunks = []
+        for await (const chunk of req) chunks.push(chunk)
+        body = Buffer.concat(chunks)
+      }
+      const headers = { ...req.headers }
+      delete headers.host
+      delete headers.cookie
+      delete headers['content-length']
+      const r = await fetch(target, { method: req.method, headers, body, redirect: 'manual' })
+      const buf = Buffer.from(await r.arrayBuffer())
+      const outHeaders = { 'content-type': r.headers.get('content-type') || 'application/octet-stream' }
+      if (r.headers.get('location')) outHeaders.location = r.headers.get('location')
+      res.writeHead(r.status, outHeaders)
+      res.end(buf)
+      return
+    } catch { return send(res, 502, { ok: false, error: 'Live2D 服务不可达' }) }
+  }
+
   if (p.startsWith('/s/')) {
     if (!authorized(req)) return send(res, 401, { ok: false, error: '请先输入邀请码' })
     const hash = p.slice(3).replace(/\.gif$/i, '').replace(/[^a-f0-9]/gi, '')
@@ -316,4 +342,26 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`whaleweb listening on http://127.0.0.1:${PORT}`)
+})
+
+// WebSocket 升级代理：把 /l2d/ 下的 WS 转发给 Live2D 工作台（仅开发者）。
+server.on('upgrade', (req, socket, head) => {
+  let p = '/'
+  try { p = new URL(req.url, 'http://localhost').pathname } catch {}
+  if (p !== '/l2d' && !p.startsWith('/l2d/')) { socket.destroy(); return }
+  if (identityOf(req) !== 'owner') { socket.destroy(); return }
+  const targetPath = p === '/l2d' ? '/' : p.slice('/l2d'.length)
+  const upstream = net.connect(61945, '127.0.0.1', () => {
+    let header = `${req.method} ${targetPath} HTTP/${req.httpVersion}\r\n`
+    for (const [k, v] of Object.entries(req.headers)) {
+      if (k.toLowerCase() !== 'host') header += `${k}: ${v}\r\n`
+    }
+    header += 'host: 127.0.0.1:61945\r\n\r\n'
+    upstream.write(header)
+    if (head && head.length) upstream.write(head)
+    socket.pipe(upstream)
+    upstream.pipe(socket)
+  })
+  upstream.on('error', () => socket.destroy())
+  socket.on('error', () => upstream.destroy())
 })

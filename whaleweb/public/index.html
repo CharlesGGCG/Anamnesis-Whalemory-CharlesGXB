@@ -272,6 +272,7 @@
         </div>
         <div class="head-actions">
           <button id="theme-btn" class="icon-btn" title="深浅色">🌙</button>
+          <button id="l2d-btn" class="icon-btn hidden" title="Live2D 工作台">🎭</button>
           <button id="dev-btn" class="icon-btn hidden" title="思考后台">🧠</button>
         </div>
       </header>
@@ -427,6 +428,7 @@
     if (devMode) {
       $('app').classList.add('dev')
       $('dev-btn').classList.remove('hidden')
+      $('l2d-btn').classList.remove('hidden')
       $('right').classList.remove('hidden')
       $('resizer-right').classList.remove('hidden')
     }
@@ -694,6 +696,7 @@
 
   $('theme-btn').onclick = toggleTheme
   $('dev-btn').onclick = () => $('right').classList.toggle('hidden')
+  $('l2d-btn').onclick = () => window.open('/l2d/', '_blank')
   $('dev-close').onclick = () => $('right').classList.add('hidden')
 
   // —— 两侧侧屏拖拽调宽（记忆到 localStorage）——
