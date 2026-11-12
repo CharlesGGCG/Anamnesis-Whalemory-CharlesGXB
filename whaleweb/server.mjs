@@ -94,12 +94,26 @@ function resolveStickerRef(ref) {
   return { hash: s.hash, name: s.name, emotion: s.emotion, text: s.text }
 }
 
-// 把 `[动作:伸懒腰]` 派给 Live2D 工作台：编排 → 校验 → 播放（fire-and-forget，不阻塞聊天）。
+// 把 `[动作:伸懒腰]` 派给 Live2D 工作台：先查快捷预设直接重播，命中不了再走 DSH 编排（fire-and-forget）。
 const L2D_BASE = 'http://127.0.0.1:61945'
 async function triggerLive2DAction(action) {
   const a = String(action || '').trim().slice(0, 24)
   if (!a) return
   try {
+    // 1) 快捷预设：按名字模糊匹配（伸个懒腰 → 伸懒腰），直接重播，省 DSH 编排。
+    const pr = await fetch(`${L2D_BASE}/api/presets`).then((r) => r.json()).catch(() => null)
+    const list = Array.isArray(pr?.presets) ? pr.presets : []
+    const hit = list.find((p) => {
+      const n = String(p?.name || '').trim()
+      return n && (a.includes(n) || n.includes(a))
+    })
+    if (hit?.id) {
+      await fetch(`${L2D_BASE}/api/presets/play`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: hit.id }),
+      }).catch(() => {})
+      return
+    }
+    // 2) 没命中预设 → DSH 编排 → 校验 → 播放。
     const r1 = await fetch(`${L2D_BASE}/api/planner/run`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt: a }),
     })
