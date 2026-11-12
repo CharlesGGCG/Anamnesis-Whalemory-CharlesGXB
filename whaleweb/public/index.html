@@ -296,7 +296,8 @@
 
 <script>
   const $ = (id) => document.getElementById(id)
-  const msgs = $('thread')
+  const msgs = $('thread')      // 气泡内容容器
+  const scroller = $('msgs')    // 实际滚动容器（<main>）
 
   // —— 主题（Claude 深/浅）——
   const THEME_KEY = 'ww_theme'
@@ -334,7 +335,7 @@
     if (!text) return
     const row = bubbleNode(role, text)
     msgs.appendChild(row)
-    msgs.scrollTop = msgs.scrollHeight
+    scroller.scrollTop = scroller.scrollHeight
     return row
   }
 
@@ -360,7 +361,7 @@
     }
     row.appendChild(b)
     msgs.appendChild(row)
-    msgs.scrollTop = msgs.scrollHeight
+    scroller.scrollTop = scroller.scrollHeight
     return row
   }
 
@@ -380,7 +381,7 @@
       t.className = 'typing'; t.innerHTML = '<span class="dots">她正在想</span>'
       row.appendChild(t)
       msgs.appendChild(row)
-      msgs.scrollTop = msgs.scrollHeight
+      scroller.scrollTop = scroller.scrollHeight
     } else {
       pollStatus()
     }
@@ -403,7 +404,7 @@
     b.appendChild(btn)
     row.appendChild(b)
     msgs.appendChild(row)
-    msgs.scrollTop = msgs.scrollHeight
+    scroller.scrollTop = scroller.scrollHeight
   }
 
   async function loadHistory() {
@@ -643,7 +644,7 @@
     b.appendChild(img)
     row.appendChild(b)
     msgs.appendChild(row)
-    msgs.scrollTop = msgs.scrollHeight
+    scroller.scrollTop = scroller.scrollHeight
     const say = stickerText(s)
     if (say) deliver(say)
   }
