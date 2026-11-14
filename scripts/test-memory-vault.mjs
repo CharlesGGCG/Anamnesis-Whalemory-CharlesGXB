@@ -6,7 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 import {
   addFromText, addVaultEntry, listVault, markVaultDone, vaultPromptBlock, promisePromptBlock,
-  extractKeywordsRule, isPromiseText, loadVault, dueInfo, listDue, dueTodayPromptBlock,
+  extractKeywordsRule, isPromiseText, loadVault, dueInfo, listDue, dueTodayPromptBlock, upcomingPromptBlock,
   pushVaultCandidate, takeVaultCandidates, commitVaultCandidates, rollbackVaultCandidates,
 } from '../src/memory-vault.js'
 
@@ -98,5 +98,16 @@ assert.match(d1, /前天就该做的事/)
 assert.equal(dueTodayPromptBlock({ file: dueFile, now: T1 + 3600_000 }), '', '20 小时内不重复')
 assert.match(dueTodayPromptBlock({ file: dueFile, now: T1 + 21 * 3600_000 }), /今天要交的作业/)
 
+// 11) 年度重复：生日不会变成「过期」，7 天内提醒、20h 冷却
+const bdayFile = path.join(dir, 'bday.json')
+addVaultEntry({ kind: 'fact', text: '主人的生日是 2006 年 12 月 2 日', dueAt: '2006-12-02', repeat: 'yearly' }, { file: bdayFile, now: T1 })
+assert.equal(dueInfo({ dueAt: '2006-12-02', repeat: 'yearly' }, T1).days, 18)
+assert.equal(dueInfo({ dueAt: '2006-12-02', repeat: 'yearly' }, Date.parse('2026-12-02T04:00:00Z')).text, '就是今天')
+assert.equal(upcomingPromptBlock({ withinDays: 7, file: bdayFile, now: Date.parse('2026-11-20T12:00:00Z') }), '', '12 天前不提醒')
+const soonAt = Date.parse('2026-11-28T12:00:00Z')
+assert.match(upcomingPromptBlock({ withinDays: 7, file: bdayFile, now: soonAt }), /快到了的日子/)
+assert.match(upcomingPromptBlock({ withinDays: 7, file: bdayFile, now: soonAt + 21 * 3600_000 }), /生日/)
+assert.match(promisePromptBlock({ file: bdayFile, now: T1 }), /^$/, '生日不是承诺，不进承诺清单')
+
 fs.rmSync(dir, { recursive: true, force: true })
-console.log('ok memory-vault: 写入/命中/承诺/去重/队列/到期 10 组断言通过')
+console.log('ok memory-vault: 写入/命中/承诺/去重/队列/到期/年度 11 组断言通过')

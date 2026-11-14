@@ -40,6 +40,7 @@ if (cmd === 'add') {
     kind: String(args.get('kind') ?? ''),
     importance: Number(args.get('importance')) || 0,
     dueAt: String(args.get('due') ?? ''),
+    repeat: String(args.get('repeat') ?? ''),
     source: 'cli',
     useLLM: !flag('no-llm'),
   })

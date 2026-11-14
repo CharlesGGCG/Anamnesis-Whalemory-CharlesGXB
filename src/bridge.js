@@ -90,7 +90,7 @@ import {
   readVectorIndex, renderVectorRecallBlock, resolveVectorMemoryPaths,
 } from './vector-memory.js';
 import { getMemoryGraph, graphRecallBlock } from './memory-graph.js';
-import { vaultPromptBlock, promisePromptBlock, dueTodayPromptBlock, pushVaultCandidate, isRememberText } from './memory-vault.js';
+import { vaultPromptBlock, promisePromptBlock, dueTodayPromptBlock, upcomingPromptBlock, pushVaultCandidate, isRememberText } from './memory-vault.js';
 import {
   activeMemoryPaths, activePersonaFile, activePlatformStateDir, characterPaths, readCurrentCharacter,
   readPersonaLayerText,
@@ -15379,7 +15379,7 @@ async function main() {
     let vaultBlock = '';
     try {
       const lastUserText = String(lastMsg?.text || lastMsg?.plain || '').trim();
-      const vaultText = [vaultPromptBlock(lastUserText), promisePromptBlock(), dueTodayPromptBlock()].filter(Boolean).join('\n');
+      const vaultText = [vaultPromptBlock(lastUserText), promisePromptBlock(), dueTodayPromptBlock(), upcomingPromptBlock()].filter(Boolean).join('\n');
       vaultBlock = vaultText ? `${vaultText}\n` : '';
       const lastAt = Number(lastMsg?.at || lastMsg?.time || 0);
       if (lastUserText && isRememberText(lastUserText) && (!lastAt || Date.now() - lastAt < 10 * 60_000)) {

@@ -80,6 +80,8 @@ export function addVaultEntry(entry = {}, { file = vaultPaths().file, now = Date
     importance: Math.max(1, Math.min(5, Number(entry.importance) || 3)),
     status: entry.kind === 'promise' ? 'pending' : 'active',
     dueAt: String(entry.dueAt ?? '').slice(0, 10),
+    repeat: entry.repeat === 'yearly' ? 'yearly' : '',
+    allowPast: entry.allowPast === true,
     source: String(entry.source ?? 'manual').slice(0, 40),
     createdAt: new Date(now).toISOString(),
     updatedAt: new Date(now).toISOString(),
@@ -198,7 +200,7 @@ export async function extractKeywordsLLM(text, { timeoutMs = 15_000 } = {}) {
 }
 
 /** 写入入口：优先 LLM 抽词，失败退回规则。 */
-export async function addFromText(text, { kind = '', importance = 0, source = 'manual', dueAt = '', file = vaultPaths().file, now = Date.now(), useLLM = true } = {}) {
+export async function addFromText(text, { kind = '', importance = 0, source = 'manual', dueAt = '', repeat = '', file = vaultPaths().file, now = Date.now(), useLLM = true } = {}) {
   const content = String(text ?? '').trim()
   if (!content) return { ok: false, error: '正文为空' }
   const llm = useLLM ? await extractKeywordsLLM(content) : null
@@ -211,6 +213,7 @@ export async function addFromText(text, { kind = '', importance = 0, source = 'm
     entities: llm?.entities ?? [],
     importance: importance || llm?.importance || (entryKind === 'promise' ? 4 : 3),
     dueAt,
+    repeat,
     source,
   }, { file, now })
 }
@@ -263,16 +266,49 @@ function renderEntries(entries, { maxChars = 600, now = Date.now() } = {}) {
 export function dueInfo(entry, now = Date.now()) {
   const raw = String(entry?.dueAt ?? '').trim()
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return { text: '', days: null }
-  const due = Date.parse(`${raw}T00:00:00+08:00`)
-  if (!Number.isFinite(due)) return { text: '', days: null }
   const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date(now))
   const todayStart = Date.parse(`${today}T00:00:00+08:00`)
   if (!Number.isFinite(todayStart)) return { text: '', days: null }
+  // 年度重复（生日/纪念日）：只取月日，算「下一次」还有几天，永远不会变成「已过期」
+  if (entry?.repeat === 'yearly') {
+    const [, mm, dd] = raw.split('-')
+    const thisYear = Number(today.slice(0, 4))
+    let next = Date.parse(`${thisYear}-${mm}-${dd}T00:00:00+08:00`)
+    if (Number.isFinite(next) && next < todayStart) next = Date.parse(`${thisYear + 1}-${mm}-${dd}T00:00:00+08:00`)
+    if (!Number.isFinite(next)) return { text: '', days: null }
+    const days = Math.round((next - todayStart) / 86_400_000)
+    if (days === 0) return { text: '就是今天', days, next: new Date(next).toISOString().slice(0, 10) }
+    return { text: days === 1 ? '明天' : `还有 ${days} 天`, days, next: new Date(next).toISOString().slice(0, 10) }
+  }
+  const due = Date.parse(`${raw}T00:00:00+08:00`)
+  if (!Number.isFinite(due)) return { text: '', days: null }
   const days = Math.round((due - todayStart) / 86_400_000)
   if (days < 0) return { text: `已过期 ${-days} 天`, days }
   if (days === 0) return { text: '今天到期', days }
   if (days === 1) return { text: '明天到期', days }
   return { text: `${raw} 前`, days }
+}
+
+/**
+ * 快到期的年度日子（生日/纪念日）：7 天内才出现，20 小时冷却。
+ * 和承诺不同，这类不需要「兑现」，只需要提前想起来。
+ */
+export function upcomingPromptBlock({ withinDays = 7, limit = 5, maxChars = 300, minGapMs = 20 * 60 * 60 * 1000, ignoreGap = false, touch = true, file = vaultPaths().file, now = Date.now() } = {}) {
+  try {
+    const vault = loadVault({ file })
+    const last = Number(vault.meta?.lastUpcomingPromptAt) || 0
+    if (!ignoreGap && last && now - last < minGapMs) return ''
+    const items = vault.entries
+      .filter((e) => e.repeat === 'yearly' && e.status !== 'done')
+      .map((e) => ({ e, info: dueInfo(e, now) }))
+      .filter((x) => x.info.days !== null && x.info.days <= withinDays)
+      .sort((a, b) => a.info.days - b.info.days)
+      .slice(0, limit)
+    if (!items.length) return ''
+    if (touch) { vault.meta = { ...(vault.meta || {}), lastUpcomingPromptAt: now }; saveVault(vault, { file }) }
+    const lines = items.map(({ e, info }) => `- ${String(e.text).slice(0, 80)}（${info.text}）`)
+    return `〔快到了的日子〕\n${lines.join('\n')}`
+  } catch { return '' }
 }
 
 /** 列出 N 天内到期/已过期的承诺（CLI 用）。 */
