@@ -12,6 +12,7 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { requireFfmpeg } from '../lib/ffmpeg.mjs'
 import { appendWatch } from '../lib/watch-history.mjs'
+import { pushGraphEvent } from '../lib/graph-outbox.mjs'
 import { formatShotsStats, pruneShots, shotsPath } from '../lib/shots-cache.mjs'
 
 let FFMPEG
@@ -171,5 +172,17 @@ if (!process.env.SURFCORE_WATCH_PARENT && !process.argv.includes('--no-history')
     sheet,
     subs: fs.existsSync(subs) ? subs : '',
   })
-  if (rec.ok) console.log(`[观看历史] 已记一笔：${bvid}（抽帧）`)
+  if (rec.ok) {
+    console.log(`[观看历史] 已记一笔：${bvid}（抽帧）`)
+    pushGraphEvent({
+      kind: 'bili-watch',
+      bvid,
+      title,
+      up: owner,
+      tname: view.data.tname ?? '',
+      duration,
+      mode: 'frames',
+      source: process.env.SURFCORE_WATCH_SOURCE || 'watch',
+    })
+  }
 }

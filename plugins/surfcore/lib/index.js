@@ -73,6 +73,7 @@ import { normalizeAllowlist } from '../../../src/allowlist.js';
 import { createPetService, detectElectronPath, installElectronRuntime, ELECTRON_VERSION, electronDownloadUrl } from './pet.js';
 import { createPetChatService } from './pet-chat.js';
 import { createScreenObserver } from './screen-observer.js';
+import { createGraphOutboxDrain } from './graph-outbox.js';
 import { createPetPurposeService } from './pet-purpose.js';
 import { createPetApiService } from './pet-api.js';
 import { createUpdatesService, resumePendingApply } from './updates.js';
@@ -266,6 +267,9 @@ export function apply(ctx) {
   let screenWatchEnabled = true;
   try { screenWatchEnabled = readUnified().config?.screenWatch !== false; } catch {}
   if (screenWatchEnabled) screenObserver.start();
+  // B站 捕获：工具进程往 graph-outbox.jsonl 追加，这里每分钟统一入记忆图谱。
+  const graphOutbox = createGraphOutboxDrain({ pluginLog });
+  graphOutbox.start();
   const petPurpose = createPetPurposeService({ chat: petChat, tokenBudget, pluginLog, callBridge });
   const petApi = createPetApiService({
     chat: petChat,

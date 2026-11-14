@@ -14,6 +14,7 @@
 //   · 鱼太多 → 拒绝发新楼层，自动改成回复一条合适的鱼（--no-fish-gather 可关）；
 //   · 发完后顺手给识别到的鱼点赞（受每日上限约束，见 lib/fish-guard.mjs）。
 import { accountBili, biliState, biliStateDir } from '../lib/state-paths.mjs'
+import { pushGraphEvent } from '../lib/graph-outbox.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
@@ -544,6 +545,15 @@ if (out.code === 0) {
   console.log(bvid
     ? `  https://www.bilibili.com/video/${bvid}/#reply${rpid}`
     : `  ${referer.replace(/\/$/, '')}#reply${rpid}`)
+  // 记忆图谱：她公开发过的话要记住（走插件进程的出站队列，不阻塞这条命令）
+  pushGraphEvent({
+    kind: 'bili-comment',
+    bvid: bvid || '',
+    oid: String(oid ?? ''),
+    rpid: String(rpid ?? ''),
+    text: message,
+    source: AUTO ? 'auto' : (SHARE ? 'share' : 'manual'),
+  })
   process.exit(0) // P0-6：成功
 } else {
   const hints = {

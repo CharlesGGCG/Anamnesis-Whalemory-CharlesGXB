@@ -20,6 +20,7 @@ import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { config } from '../lib/config.mjs'
 import { appendWatch } from '../lib/watch-history.mjs'
+import { pushGraphEvent } from '../lib/graph-outbox.mjs'
 import { formatShotsStats, pruneShots, shotsPath } from '../lib/shots-cache.mjs'
 
 const argv = process.argv.slice(2)
@@ -305,7 +306,20 @@ if (!opt['no-history']) {
     sheet: watchRecord.sheet,
     subs: watchRecord.subs,
   })
-  if (rec.ok) console.log(`\n[观看历史] 已记一笔：${bvid}（${opt['no-frames'] ? '浅看' : '深看'}）`)
+  if (rec.ok) {
+    console.log(`\n[观看历史] 已记一笔：${bvid}（${opt['no-frames'] ? '浅看' : '深看'}）`)
+    // 记忆图谱：走插件进程的出站队列（短进程直接 enqueue 会随进程退出丢掉）
+    pushGraphEvent({
+      kind: 'bili-watch',
+      bvid,
+      title: d.title,
+      up: d.owner?.name ?? '',
+      tname: d.tname ?? '',
+      duration: dur,
+      mode: opt['no-frames'] ? 'meta' : 'full',
+      source: 'debrief',
+    })
+  }
 }
 
 try { console.log(formatShotsStats(pruneShots())) } catch {}
