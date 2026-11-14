@@ -1,0 +1,1018 @@
+{
+  "exportedAt": "2026-11-14T22:00:09.790Z",
+  "source": "AgentL2D /api/presets",
+  "presets": [
+    {
+      "name": "鼓腮",
+      "duration": 9.1,
+      "createdAt": "2026-11-14T21:55:03.850707+00:00",
+      "plan": {
+        "version": 1,
+        "title": "鼓腮生闷气",
+        "intent": "鼓起脸颊像在生闷气，保持一会儿后慢慢把气消下去，最后回到待机",
+        "summary": "先低头垂眼、皱起眉头并把双颊鼓起，中间小幅回弹并在憋气时偷瞄一眼保持闷气感，随后用一次轻轻呼气让脸颊一点点瘪下去，结尾头轻侧一下收住情绪，整体缓收回到默认姿态；两段眨眼配合增加活气。",
+        "view": "portrait",
+        "actions": [
+          {
+            "kind": "trajectory",
+            "at": 0,
+            "duration": 8.4,
+            "frames": [
+              {
+                "time": 0.25,
+                "values": {
+                  "CheeckPuff": 0.05,
+                  "AngleX": 0,
+                  "AngleY": 0,
+                  "ParamEyeBallY": 0,
+                  "ParamBrowLY": 0,
+                  "ParamBrowRY": 0,
+                  "BrowInnerUp": 0.1,
+                  "ParamMouthForm": 0,
+                  "ParamMouthOpenY": 0.05
+                }
+              },
+              {
+                "time": 0.7,
+                "values": {
+                  "CheeckPuff": 0.55,
+                  "AngleX": 4,
+                  "AngleY": -8,
+                  "ParamEyeBallY": -0.15,
+                  "ParamBrowLY": -0.35,
+                  "ParamBrowRY": -0.35,
+                  "BrowInnerUp": 0.5,
+                  "ParamMouthForm": -0.4,
+                  "ParamMouthOpenY": 0.1
+                }
+              },
+              {
+                "time": 1.15,
+                "values": {
+                  "CheeckPuff": 0.92,
+                  "AngleX": 6,
+                  "AngleY": -12,
+                  "ParamEyeBallY": -0.2,
+                  "ParamBrowLY": -0.5,
+                  "ParamBrowRY": -0.5,
+                  "BrowInnerUp": 0.7,
+                  "ParamMouthForm": -0.55,
+                  "ParamMouthOpenY": 0.14
+                }
+              },
+              {
+                "time": 1.6,
+                "values": {
+                  "CheeckPuff": 0.85,
+                  "AngleX": 5,
+                  "AngleY": -10.5,
+                  "ParamEyeBallY": -0.18,
+                  "ParamBrowLY": -0.46,
+                  "ParamBrowRY": -0.46,
+                  "BrowInnerUp": 0.64,
+                  "ParamMouthForm": -0.5,
+                  "ParamMouthOpenY": 0.12
+                }
+              },
+              {
+                "time": 3,
+                "values": {
+                  "CheeckPuff": 0.9,
+                  "AngleX": 6,
+                  "AngleY": -11,
+                  "ParamEyeBallY": -0.15,
+                  "ParamBrowLY": -0.48,
+                  "ParamBrowRY": -0.48,
+                  "BrowInnerUp": 0.66,
+                  "ParamMouthForm": -0.52,
+                  "ParamMouthOpenY": 0.11
+                }
+              },
+              {
+                "time": 3.4,
+                "values": {
+                  "CheeckPuff": 0.88,
+                  "AngleX": 9,
+                  "AngleY": -10,
+                  "ParamEyeBallY": -0.1,
+                  "ParamBrowLY": -0.44,
+                  "ParamBrowRY": -0.44,
+                  "BrowInnerUp": 0.6,
+                  "ParamMouthForm": -0.5,
+                  "ParamMouthOpenY": 0.11
+                }
+              },
+              {
+                "time": 4,
+                "values": {
+                  "CheeckPuff": 0.86,
+                  "AngleX": 8,
+                  "AngleY": -9.5,
+                  "ParamEyeBallY": -0.12,
+                  "ParamBrowLY": -0.4,
+                  "ParamBrowRY": -0.4,
+                  "BrowInnerUp": 0.56,
+                  "ParamMouthForm": -0.46,
+                  "ParamMouthOpenY": 0.1
+                }
+              },
+              {
+                "time": 4.6,
+                "values": {
+                  "CheeckPuff": 0.7,
+                  "AngleX": 7,
+                  "AngleY": -8,
+                  "ParamEyeBallY": -0.1,
+                  "ParamBrowLY": -0.3,
+                  "ParamBrowRY": -0.3,
+                  "BrowInnerUp": 0.45,
+                  "ParamMouthForm": -0.36,
+                  "ParamMouthOpenY": 0.16
+                }
+              },
+              {
+                "time": 5.6,
+                "values": {
+                  "CheeckPuff": 0.42,
+                  "AngleX": 5,
+                  "AngleY": -5,
+                  "ParamEyeBallY": -0.05,
+                  "ParamBrowLY": -0.12,
+                  "ParamBrowRY": -0.12,
+                  "BrowInnerUp": 0.26,
+                  "ParamMouthForm": -0.2,
+                  "ParamMouthOpenY": 0.28
+                }
+              },
+              {
+                "time": 6.6,
+                "values": {
+                  "CheeckPuff": 0.16,
+                  "AngleX": 3,
+                  "AngleY": -2,
+                  "ParamEyeBallY": 0,
+                  "ParamBrowLY": 0,
+                  "ParamBrowRY": 0,
+                  "BrowInnerUp": 0.1,
+                  "ParamMouthForm": 0.04,
+                  "ParamMouthOpenY": 0.14
+                }
+              },
+              {
+                "time": 7.4,
+                "values": {
+                  "CheeckPuff": 0.04,
+                  "AngleX": -6,
+                  "AngleY": 0,
+                  "ParamEyeBallY": 0.05,
+                  "ParamBrowLY": 0.05,
+                  "ParamBrowRY": 0.05,
+                  "BrowInnerUp": 0.04,
+                  "ParamMouthForm": 0.1,
+                  "ParamMouthOpenY": 0.05
+                }
+              },
+              {
+                "time": 8.1,
+                "values": {
+                  "CheeckPuff": 0,
+                  "AngleX": 0,
+                  "AngleY": 0,
+                  "ParamEyeBallY": 0,
+                  "ParamBrowLY": 0,
+                  "ParamBrowRY": 0,
+                  "BrowInnerUp": 0,
+                  "ParamMouthForm": 0,
+                  "ParamMouthOpenY": 0
+                }
+              }
+            ]
+          },
+          {
+            "kind": "blink",
+            "side": "both",
+            "count": 2,
+            "at": 2.6,
+            "duration": 1.4
+          },
+          {
+            "kind": "blink",
+            "side": "both",
+            "count": 1,
+            "at": 5.2,
+            "duration": 0.8
+          }
+        ]
+      }
+    },
+    {
+      "name": "挑眉",
+      "duration": 6.1,
+      "createdAt": "2026-11-14T21:54:46.247038+00:00",
+      "plan": {
+        "version": 1,
+        "title": "挑眉的得意与疑惑",
+        "intent": "挑一下眉毛，露出一点得意又疑惑的表情",
+        "summary": "先快速挑起眉毛，再带一点点歪头示意；接着换边挑眉、把一只眼睛眯起来，做出得意神态，然后对侧眉毛上扬，露出疑惑；最后轻轻松回待机，中途两次眨眼来配合节奏。全程不抬手，只靠眉眼和幅度很小的头动来表现。",
+        "view": "portrait",
+        "actions": [
+          {
+            "kind": "trajectory",
+            "at": 0,
+            "duration": 5.4,
+            "frames": [
+              {
+                "time": 0.3,
+                "values": {
+                  "AngleX": 0,
+                  "AngleY": 2,
+                  "AngleZ": -1,
+                  "ParamEyeBallX": 0.1,
+                  "ParamEyeBallY": 0.15,
+                  "ParamBrowLY": 0.05,
+                  "ParamBrowRY": 0.05,
+                  "BrowInnerUp": 0.1,
+                  "LEyeSquint": 0,
+                  "REyeSquint": 0,
+                  "ParamMouthForm": 0.1,
+                  "MouthX": 0.05
+                }
+              },
+              {
+                "time": 0.5,
+                "values": {
+                  "AngleX": 1,
+                  "AngleY": 3,
+                  "AngleZ": -3,
+                  "ParamEyeBallX": 0.25,
+                  "ParamEyeBallY": 0.3,
+                  "ParamBrowLY": 0.65,
+                  "ParamBrowRY": 0.3,
+                  "BrowInnerUp": 0.55,
+                  "LEyeSquint": 0.1,
+                  "REyeSquint": 0.35,
+                  "ParamMouthForm": 0.3,
+                  "MouthX": 0.25
+                }
+              },
+              {
+                "time": 0.68,
+                "values": {
+                  "AngleX": 1,
+                  "AngleY": 2,
+                  "AngleZ": -2,
+                  "ParamEyeBallX": 0.2,
+                  "ParamEyeBallY": 0.22,
+                  "ParamBrowLY": 0.55,
+                  "ParamBrowRY": 0.22,
+                  "BrowInnerUp": 0.45,
+                  "LEyeSquint": 0.15,
+                  "REyeSquint": 0.3,
+                  "ParamMouthForm": 0.25,
+                  "MouthX": 0.2
+                }
+              },
+              {
+                "time": 1.25,
+                "values": {
+                  "AngleX": -6,
+                  "AngleY": -2,
+                  "AngleZ": -6,
+                  "ParamEyeBallX": -0.3,
+                  "ParamEyeBallY": 0.1,
+                  "ParamBrowLY": 0.4,
+                  "ParamBrowRY": 0.6,
+                  "BrowInnerUp": 0.35,
+                  "LEyeSquint": 0.45,
+                  "REyeSquint": 0.15,
+                  "ParamMouthForm": 0.4,
+                  "MouthX": -0.3
+                }
+              },
+              {
+                "time": 1.7,
+                "values": {
+                  "AngleX": -5,
+                  "AngleY": -1,
+                  "AngleZ": -5,
+                  "ParamEyeBallX": -0.25,
+                  "ParamEyeBallY": 0.12,
+                  "ParamBrowLY": 0.45,
+                  "ParamBrowRY": 0.5,
+                  "BrowInnerUp": 0.3,
+                  "LEyeSquint": 0.4,
+                  "REyeSquint": 0.2,
+                  "ParamMouthForm": 0.45,
+                  "MouthX": -0.25
+                }
+              },
+              {
+                "time": 2.35,
+                "values": {
+                  "AngleX": 4,
+                  "AngleY": 4,
+                  "AngleZ": 4,
+                  "ParamEyeBallX": 0.3,
+                  "ParamEyeBallY": 0.25,
+                  "ParamBrowLY": 0.3,
+                  "ParamBrowRY": 0.7,
+                  "BrowInnerUp": 0.6,
+                  "LEyeSquint": 0.05,
+                  "REyeSquint": 0.45,
+                  "ParamMouthForm": 0.15,
+                  "MouthX": 0.35
+                }
+              },
+              {
+                "time": 2.9,
+                "values": {
+                  "AngleX": 3,
+                  "AngleY": 3,
+                  "AngleZ": 3,
+                  "ParamEyeBallX": 0.22,
+                  "ParamEyeBallY": 0.2,
+                  "ParamBrowLY": 0.28,
+                  "ParamBrowRY": 0.58,
+                  "BrowInnerUp": 0.5,
+                  "LEyeSquint": 0.1,
+                  "REyeSquint": 0.4,
+                  "ParamMouthForm": 0.2,
+                  "MouthX": 0.3
+                }
+              },
+              {
+                "time": 3.55,
+                "values": {
+                  "AngleX": 0,
+                  "AngleY": 0,
+                  "AngleZ": 0,
+                  "ParamEyeBallX": 0.05,
+                  "ParamEyeBallY": 0.05,
+                  "ParamBrowLY": 0.15,
+                  "ParamBrowRY": 0.2,
+                  "BrowInnerUp": 0.2,
+                  "LEyeSquint": 0.1,
+                  "REyeSquint": 0.1,
+                  "ParamMouthForm": 0.1,
+                  "MouthX": 0.1
+                }
+              },
+              {
+                "time": 5,
+                "values": {
+                  "AngleX": 0,
+                  "AngleY": 0,
+                  "AngleZ": 0,
+                  "ParamEyeBallX": 0,
+                  "ParamEyeBallY": 0,
+                  "ParamBrowLY": 0,
+                  "ParamBrowRY": 0,
+                  "BrowInnerUp": 0,
+                  "LEyeSquint": 0,
+                  "REyeSquint": 0,
+                  "ParamMouthForm": 0,
+                  "MouthX": 0
+                }
+              }
+            ]
+          },
+          {
+            "kind": "blink",
+            "side": "both",
+            "count": 1,
+            "at": 1,
+            "duration": 0.28,
+            "strength": 0.8
+          },
+          {
+            "kind": "blink",
+            "side": "both",
+            "count": 1,
+            "at": 3.3,
+            "duration": 0.28,
+            "strength": 0.7
+          }
+        ]
+      }
+    },
+    {
+      "name": "微笑",
+      "duration": 4.95,
+      "createdAt": "2026-11-14T21:54:28.670843+00:00",
+      "plan": {
+        "version": 1,
+        "title": "温柔浅笑",
+        "intent": "嘴角慢慢上扬，露出温柔的笑容，眼睛也弯起来",
+        "summary": "头部先轻轻侧倾营造柔和感，随后笑容从嘴角慢慢绽开、眼型同步弯成月牙，停留片刻后自然收回，最后轻眨一下眼回到待机。",
+        "view": "portrait",
+        "actions": [
+          {
+            "kind": "tilt",
+            "direction": "left",
+            "at": 0.3,
+            "duration": 3.4,
+            "strength": 0.45
+          },
+          {
+            "kind": "smile",
+            "at": 0.45,
+            "duration": 3.8,
+            "strength": 0.75
+          },
+          {
+            "kind": "blink",
+            "side": "both",
+            "count": 1,
+            "at": 3.5,
+            "duration": 0.6,
+            "strength": 0.8
+          }
+        ]
+      }
+    },
+    {
+      "name": "摇头",
+      "duration": 5.7,
+      "createdAt": "2026-11-14T21:54:19.089278+00:00",
+      "plan": {
+        "version": 1,
+        "title": "无奈轻摇拒绝",
+        "intent": "轻轻摇两下头，带着一点无奈地拒绝",
+        "summary": "先微微偏头带出迟疑，再用两次温和摇头表示拒绝，随后垂眼收尾，全程维持流冷汗的无奈表情，最后回到待机。",
+        "view": "portrait",
+        "actions": [
+          {
+            "kind": "expression",
+            "name": "流冷汗",
+            "at": 0.1,
+            "duration": 4.6,
+            "strength": 0.7
+          },
+          {
+            "kind": "tilt",
+            "direction": "left",
+            "at": 0.3,
+            "duration": 0.9
+          },
+          {
+            "kind": "shake_head",
+            "count": 2,
+            "at": 1.35,
+            "duration": 2.3,
+            "strength": 0.55
+          },
+          {
+            "kind": "blink",
+            "side": "both",
+            "count": 1,
+            "at": 3.5,
+            "duration": 0.3
+          },
+          {
+            "kind": "look",
+            "direction": "down",
+            "at": 3.9,
+            "duration": 1.1
+          }
+        ]
+      }
+    },
+    {
+      "name": "点头",
+      "duration": 3.3,
+      "createdAt": "2026-11-14T21:54:09.525484+00:00",
+      "plan": {
+        "version": 1,
+        "title": "轻轻点头应一声",
+        "intent": "轻轻点一下头，像在说「嗯，我知道了」，自然一点",
+        "summary": "先抬眼看向对方，随后一个幅度不大、带预备与缓收的点头，配一个浅浅的微笑和一次眨眼，最后安静回到待机。",
+        "view": "portrait",
+        "actions": [
+          {
+            "kind": "nod",
+            "at": 0.2,
+            "duration": 1.5,
+            "strength": 0.45,
+            "count": 1
+          },
+          {
+            "kind": "smile",
+            "at": 0.5,
+            "duration": 1.7,
+            "strength": 0.3
+          },
+          {
+            "kind": "blink",
+            "at": 2.1,
+            "duration": 0.5,
+            "side": "both",
+            "count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "持草",
+      "duration": 6.02,
+      "createdAt": "2026-11-12T06:02:14.567297+00:00",
+      "plan": {
+        "version": 1,
+        "title": "拿起狗尾草逗趣",
+        "intent": "持草逗趣：拿起狗尾草，转头垂眼看向手中草穗，微微一笑后自然收回待机",
+        "summary": "右手原生手势取出狗尾草，视线与头部先一步偏向持草一侧，身体轻侧配合低头打量草穗，中途小幅回摆制造活泼停顿，随后配合一次眨眼与浅笑收尾，手势收回时头身同步回到待机。",
+        "view": "portrait",
+        "actions": [
+          {
+            "kind": "gesture",
+            "name": "grass",
+            "at": 0.4,
+            "duration": 4.8
+          },
+          {
+            "kind": "trajectory",
+            "at": 0.2,
+            "duration": 5,
+            "frames": [
+              {
+                "time": 0.2,
+                "values": {
+                  "AngleX": -4,
+                  "AngleY": -3,
+                  "AngleZ": 0,
+                  "PositionX": -3,
+                  "ParamEyeBallX": -0.2,
+                  "ParamEyeBallY": -0.1
+                }
+              },
+              {
+                "time": 0.5,
+                "values": {
+                  "AngleX": 24,
+                  "AngleY": -6,
+                  "AngleZ": -10,
+                  "PositionX": 20,
+                  "ParamEyeBallX": 0.6,
+                  "ParamEyeBallY": -0.8
+                }
+              },
+              {
+                "time": 1.1,
+                "values": {
+                  "AngleX": 21,
+                  "AngleY": -5,
+                  "AngleZ": -7,
+                  "PositionX": 17,
+                  "ParamEyeBallX": 0.5,
+                  "ParamEyeBallY": -0.7
+                }
+              },
+              {
+                "time": 1.9,
+                "values": {
+                  "AngleX": 9,
+                  "AngleY": -2,
+                  "AngleZ": 5,
+                  "PositionX": 8,
+                  "ParamEyeBallX": 0.25,
+                  "ParamEyeBallY": -0.45
+                }
+              },
+              {
+                "time": 2.9,
+                "values": {
+                  "AngleX": 1,
+                  "AngleY": 0,
+                  "AngleZ": 8,
+                  "PositionX": 3,
+                  "ParamEyeBallX": 0.1,
+                  "ParamEyeBallY": -0.3
+                }
+              },
+              {
+                "time": 3.9,
+                "values": {
+                  "AngleX": -6,
+                  "AngleY": -2,
+                  "AngleZ": 3,
+                  "PositionX": -4,
+                  "ParamEyeBallX": -0.15,
+                  "ParamEyeBallY": -0.1
+                }
+              },
+              {
+                "time": 4.6,
+                "values": {
+                  "AngleX": -2,
+                  "AngleY": 0,
+                  "AngleZ": 0,
+                  "PositionX": -1,
+                  "ParamEyeBallX": 0,
+                  "ParamEyeBallY": 0
+                }
+              }
+            ]
+          },
+          {
+            "kind": "smile",
+            "at": 0.8,
+            "duration": 3.2,
+            "strength": 0.7
+          },
+          {
+            "kind": "blink",
+            "side": "both",
+            "count": 1,
+            "at": 4.3,
+            "duration": 0.5
+          }
+        ]
+      }
+    },
+    {
+      "name": "竖食指",
+      "duration": 6.1,
+      "createdAt": "2026-11-12T06:02:03.779827+00:00",
+      "plan": {
+        "version": 1,
+        "title": "竖起食指讲解",
+        "intent": "竖食指",
+        "summary": "轻轻起势后抬手竖起食指指向观众，头部小幅前探配合讲解，指尖停留片刻，随后收手、嘴角带笑缓缓收回视线，回到待机。",
+        "view": "portrait",
+        "actions": [
+          {
+            "kind": "trajectory",
+            "at": 0,
+            "duration": 5.4,
+            "frames": [
+              {
+                "time": 0.25,
+                "values": {
+                  "AngleX": -4,
+                  "AngleY": 2,
+                  "AngleZ": -2,
+                  "PositionX": -3,
+                  "PositionZ": -1,
+                  "ParamEyeBallX": -0.2
+                }
+              },
+              {
+                "time": 0.6,
+                "values": {
+                  "AngleX": 7,
+                  "AngleY": 4,
+                  "AngleZ": 3,
+                  "PositionX": 5,
+                  "PositionZ": 2,
+                  "ParamEyeBallX": 0.3
+                }
+              },
+              {
+                "time": 1.4,
+                "values": {
+                  "AngleX": 4,
+                  "AngleY": 2,
+                  "AngleZ": 2,
+                  "PositionX": 3,
+                  "PositionZ": 1,
+                  "ParamEyeBallX": 0.2
+                }
+              },
+              {
+                "time": 3.6,
+                "values": {
+                  "AngleX": 1,
+                  "AngleY": 0,
+                  "AngleZ": 0,
+                  "PositionX": 1,
+                  "PositionZ": 0,
+                  "ParamEyeBallX": 0
+                }
+              },
+              {
+                "time": 5.1,
+                "values": {
+                  "AngleX": -2,
+                  "AngleY": 0,
+                  "AngleZ": -1,
+                  "PositionX": -1,
+                  "PositionZ": 0,
+                  "ParamEyeBallX": 0
+                }
+              }
+            ]
+          },
+          {
+            "kind": "gesture",
+            "name": "point",
+            "at": 0.7,
+            "duration": 4.2,
+            "strength": 0.9
+          },
+          {
+            "kind": "smile",
+            "at": 1.2,
+            "duration": 3.6,
+            "strength": 0.45
+          }
+        ]
+      }
+    },
+    {
+      "name": "抚胸",
+      "duration": 5.6,
+      "createdAt": "2026-11-12T06:01:44.768172+00:00",
+      "plan": {
+        "version": 1,
+        "title": "抚胸致意",
+        "intent": "做一个温柔的抚胸致意动作",
+        "summary": "身体轻微前倾致意，右手抚于胸口，配以浅笑与轻眨眼，随后自然收回待机",
+        "view": "portrait",
+        "actions": [
+          {
+            "kind": "trajectory",
+            "at": 0,
+            "duration": 4.9,
+            "frames": [
+              {
+                "time": 0.25,
+                "values": {
+                  "AngleX": 2,
+                  "LeanInput": 2,
+                  "PositionZ": 1
+                }
+              },
+              {
+                "time": 0.7,
+                "values": {
+                  "AngleX": -6,
+                  "LeanInput": -9,
+                  "PositionZ": -3
+                }
+              },
+              {
+                "time": 1.5,
+                "values": {
+                  "AngleX": -4,
+                  "LeanInput": -6,
+                  "PositionZ": -2
+                }
+              },
+              {
+                "time": 2.8,
+                "values": {
+                  "AngleX": -3,
+                  "LeanInput": -4,
+                  "PositionZ": -1
+                }
+              },
+              {
+                "time": 4.5,
+                "values": {
+                  "AngleX": 1,
+                  "LeanInput": 0,
+                  "PositionZ": 0
+                }
+              }
+            ]
+          },
+          {
+            "kind": "gesture",
+            "name": "hand_on_chest",
+            "at": 0.4,
+            "duration": 4.2
+          },
+          {
+            "kind": "smile",
+            "at": 1,
+            "duration": 2.8,
+            "strength": 0.75
+          },
+          {
+            "kind": "blink",
+            "side": "both",
+            "count": 2,
+            "at": 2.1,
+            "duration": 0.7
+          }
+        ]
+      }
+    },
+    {
+      "name": "眨眼",
+      "duration": 4.9,
+      "createdAt": "2026-11-12T06:01:37.039150+00:00",
+      "plan": {
+        "version": 1,
+        "title": "轻轻眨眼",
+        "intent": "眨眼",
+        "summary": "待机状态下自然眨眼两次，短暂停后再眨一次，随即回到默认待机，不做多余肢体或转向动作。",
+        "view": "portrait",
+        "actions": [
+          {
+            "kind": "blink",
+            "side": "both",
+            "count": 2,
+            "at": 0.4,
+            "duration": 2,
+            "strength": 0.8
+          },
+          {
+            "kind": "blink",
+            "side": "both",
+            "count": 1,
+            "at": 3.2,
+            "duration": 1,
+            "strength": 0.7
+          }
+        ]
+      }
+    },
+    {
+      "name": "歪头",
+      "duration": 4.4,
+      "createdAt": "2026-11-12T06:01:31.379184+00:00",
+      "plan": {
+        "version": 1,
+        "title": "歪头卖萌",
+        "intent": "歪头",
+        "summary": "先抬眼看向一侧，视线先于头部，然后轻轻歪头带笑意；眨眼收尾后回到待机。",
+        "view": "portrait",
+        "actions": [
+          {
+            "kind": "look",
+            "direction": "left",
+            "at": 0,
+            "duration": 0.6,
+            "strength": 0.5
+          },
+          {
+            "kind": "tilt",
+            "direction": "left",
+            "at": 0.65,
+            "duration": 2.2,
+            "strength": 0.8
+          },
+          {
+            "kind": "smile",
+            "at": 0.9,
+            "duration": 1.8,
+            "strength": 0.7
+          },
+          {
+            "kind": "blink",
+            "side": "both",
+            "count": 1,
+            "at": 2.9,
+            "duration": 0.35
+          },
+          {
+            "kind": "look",
+            "direction": "center",
+            "at": 3.3,
+            "duration": 0.4,
+            "strength": 0.4
+          }
+        ]
+      }
+    },
+    {
+      "name": "伸懒腰",
+      "duration": 8.5,
+      "createdAt": "2026-11-12T06:01:23.163540+00:00",
+      "plan": {
+        "version": 1,
+        "title": "伸懒腰打哈欠",
+        "intent": "伸懒腰",
+        "summary": "先低头蓄力，再仰头、抬身、闭眼张嘴打哈欠，侧向舒展后缓慢回正，最后带着满足的微笑回到待机。",
+        "view": "portrait",
+        "actions": [
+          {
+            "kind": "trajectory",
+            "at": 0,
+            "duration": 6.2,
+            "frames": [
+              {
+                "time": 0.2,
+                "values": {
+                  "AngleY": 2,
+                  "AngleZ": 3,
+                  "PositionY": -1,
+                  "LeanInput": 2,
+                  "JawOpen": 0,
+                  "ParamEyeLOpen": 1,
+                  "ParamEyeROpen": 1,
+                  "BrowInnerUp": 0,
+                  "ParamMouthForm": 0
+                }
+              },
+              {
+                "time": 0.75,
+                "values": {
+                  "AngleY": -9,
+                  "AngleZ": -6,
+                  "PositionY": 6,
+                  "LeanInput": -5,
+                  "JawOpen": 0.35,
+                  "ParamEyeLOpen": 0.6,
+                  "ParamEyeROpen": 0.62,
+                  "BrowInnerUp": 0.4,
+                  "ParamMouthForm": -0.15
+                }
+              },
+              {
+                "time": 1.45,
+                "values": {
+                  "AngleY": -18,
+                  "AngleZ": -10,
+                  "PositionY": 9,
+                  "LeanInput": -10,
+                  "JawOpen": 0.6,
+                  "ParamEyeLOpen": 0.2,
+                  "ParamEyeROpen": 0.22,
+                  "BrowInnerUp": 0.7,
+                  "ParamMouthForm": -0.25
+                }
+              },
+              {
+                "time": 2.45,
+                "values": {
+                  "AngleY": -20,
+                  "AngleZ": -12,
+                  "PositionY": 10,
+                  "LeanInput": -12,
+                  "JawOpen": 0.66,
+                  "ParamEyeLOpen": 0.14,
+                  "ParamEyeROpen": 0.16,
+                  "BrowInnerUp": 0.8,
+                  "ParamMouthForm": -0.2
+                }
+              },
+              {
+                "time": 3.25,
+                "values": {
+                  "AngleY": -16,
+                  "AngleZ": 8,
+                  "PositionY": 9,
+                  "LeanInput": -8,
+                  "JawOpen": 0.5,
+                  "ParamEyeLOpen": 0.25,
+                  "ParamEyeROpen": 0.27,
+                  "BrowInnerUp": 0.65,
+                  "ParamMouthForm": -0.1
+                }
+              },
+              {
+                "time": 4.2,
+                "values": {
+                  "AngleY": -6,
+                  "AngleZ": 4,
+                  "PositionY": 4,
+                  "LeanInput": -3,
+                  "JawOpen": 0.2,
+                  "ParamEyeLOpen": 0.7,
+                  "ParamEyeROpen": 0.72,
+                  "BrowInnerUp": 0.3,
+                  "ParamMouthForm": 0
+                }
+              },
+              {
+                "time": 5.35,
+                "values": {
+                  "AngleY": 2,
+                  "AngleZ": -2,
+                  "PositionY": 0,
+                  "LeanInput": 1,
+                  "JawOpen": 0.05,
+                  "ParamEyeLOpen": 1,
+                  "ParamEyeROpen": 1,
+                  "BrowInnerUp": 0.1,
+                  "ParamMouthForm": 0.1
+                }
+              },
+              {
+                "time": 5.9,
+                "values": {
+                  "AngleY": 0,
+                  "AngleZ": 0,
+                  "PositionY": 0,
+                  "LeanInput": 0,
+                  "JawOpen": 0,
+                  "ParamEyeLOpen": 1,
+                  "ParamEyeROpen": 1,
+                  "BrowInnerUp": 0,
+                  "ParamMouthForm": 0
+                }
+              }
+            ]
+          },
+          {
+            "kind": "smile",
+            "at": 6.2,
+            "duration": 1.6,
+            "strength": 0.6
+          }
+        ]
+      }
+    }
+  ]
+}
