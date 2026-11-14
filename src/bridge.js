@@ -47,7 +47,7 @@ import {
   analyzePersona, applyPurposeOutcome, buildPurposePrompt, collectMaterials, deriveDrives,
   ensurePurposeDay, ensurePurposeSchedule, evaluatePurposeTick, formGoalHypotheses,
   markPurposeDelivered, markPurposeSkip, minePurposeSeeds, normalizePurposeConfig,
-  normalizePurposeState, parsePurposeMemo, planNextFire, selectPurpose, summarizePurposeState,
+  normalizePurposeState, parsePurposeMemo, planNextFire, releaseLoneliness, selectPurpose, summarizePurposeState,
 } from './purpose-engine.js';
 import { resolvePriceTable, isPeakAt } from './model-prices.js';
 import { catalogChoices, findCatalogModel, pickCatalogFallback } from './model-options.js';
@@ -190,6 +190,56 @@ const MEMORY_CARD_GROUP_PROMPTS = path.join(path.dirname(MEMORY_CARD_PATHS.promp
 const PLATFORM_STATE_DIR = activePlatformStateDir(STATE_DIR);
 // 容量告警私聊节流（同一档 10 分钟内最多一条；插件侧还有 12 小时的同档节流）。
 const memoryCardNotifyAt = new Map();
+// Live2D 动作联动：QQ 端发言文本里的 `[动作:伸懒腰]` 标记，拆掉后派给 Live2D 工作台（fire-and-forget）。
+const L2D_BASE = 'http://127.0.0.1:61945';
+const ACTION_MARK = /\[动作:([^\]\n]{1,24})\]/iu;
+
+/** 从模型原文拆出动作标记，返回 { text, ref }（text 已去掉标记）。 */
+function extractActionMark(text) {
+  const raw = String(text ?? '');
+  const m = ACTION_MARK.exec(raw);
+  if (!m) return { text: raw, ref: '' };
+  return { text: raw.replace(ACTION_MARK, ''), ref: m[1].trim() };
+}
+
+/** 把动作派给 Live2D 工作台：先查快捷预设直接重播，命中不了再走 DSH 编排。绝不阻塞发送、绝不抛错。 */
+async function triggerLive2DAction(action) {
+  const a = String(action || '').trim().slice(0, 24);
+  if (!a) return;
+  try {
+    const pr = await fetch(`${L2D_BASE}/api/presets`).then((r) => r.json()).catch(() => null);
+    const list = Array.isArray(pr?.presets) ? pr.presets : [];
+    const hit = list.find((p) => {
+      const n = String(p?.name || '').trim();
+      return n && (a.includes(n) || n.includes(a));
+    });
+    if (hit?.id) {
+      await fetch(`${L2D_BASE}/api/presets/play`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: hit.id }),
+      }).catch(() => {});
+      return;
+    }
+    const r1 = await fetch(`${L2D_BASE}/api/planner/run`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt: a }),
+    });
+    const j1 = await r1.json();
+    const taskId = j1?.id || j1?.taskId || j1?.task?.id;
+    if (!taskId) return;
+    for (let i = 0; i < 60; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const st = await fetch(`${L2D_BASE}/api/planner/state`).then((r) => r.json()).catch(() => null);
+      const task = (st?.tasks || []).find((t) => String(t.id) === String(taskId));
+      if (!task) continue;
+      if (task.status === 'validated') {
+        await fetch(`${L2D_BASE}/api/planner/execute`, {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId }),
+        }).catch(() => {});
+        return;
+      }
+      if (['cancelled', 'failed', 'error'].includes(task.status)) return;
+    }
+  } catch {}
+}
 
 /**
  * 模式拼写的**唯一**归一入口（输入边界）。
@@ -10822,8 +10872,16 @@ async function main() {
     const [kind, id] = key.split(':');
     const sent = [];
     const failed = [];
-    for (let i = 0; i < messages.length; i++) {
-      const msg = messages[i];
+    // 拆动作标记：文本干净化（群友看不到 [动作:xxx]），动作收集后统一派发到 Live2D。
+    let queuedAction = '';
+    const cleanMessages = messages.map((raw) => {
+      const { text, ref } = extractActionMark(raw);
+      if (ref && !queuedAction) queuedAction = ref;
+      return String(text).trim();
+    });
+    for (let i = 0; i < cleanMessages.length; i++) {
+      const msg = cleanMessages[i];
+      if (!msg) continue;
       const useReply = i === 0 ? replyToMessageId : null;
       const useAt = i === 0 ? atUserId : null;
       sendChain = sendChain
@@ -10842,6 +10900,7 @@ async function main() {
       }
     }
     return sendChain.then(() => {
+      if (queuedAction) triggerLive2DAction(queuedAction);
       if (failed.length > 0) {
         const err = new Error(`QQ 发送失败 ${failed.length}/${messages.length} 条：${failed[0]?.message ?? '未知错误'}`);
         err.sent = sent.slice();
@@ -12828,6 +12887,17 @@ async function main() {
     } catch { return []; }
   }
 
+  // 屏幕观察（陪看）：读 surfcore 插件落盘的 screen-observation.json，10 分钟内有效。
+  function readScreenObservation() {
+    try {
+      const raw = readJsonSafe(path.join(SURFCORE_DIR, 'screen-observation.json'), null);
+      const note = String(raw?.note || '').trim();
+      const at = Number(raw?.at) || 0;
+      if (!note || Date.now() - at > 10 * 60 * 1000) return null;
+      return note;
+    } catch { return null; }
+  }
+
   function gatherPurposeMaterials(now = Date.now()) {
     return collectMaterials({
       now,
@@ -12866,6 +12936,7 @@ async function main() {
       ? biliMemory.briefBlock()
       : '';
     const memoryCardText = memoryCardPromptBlock(key);
+    const screenObs = readScreenObservation();
     return [
       roleLine,
       // 人格卡是动机的先验：她是什么样的人，决定她更容易被什么打动。
@@ -12874,6 +12945,7 @@ async function main() {
       adminText,
       memoryCardText ? `【记忆卡】\n${memoryCardText.slice(0, 2400)}` : '',
       biliBrief ? `【B站记忆】\n${biliBrief.slice(0, 1800)}` : '',
+      screenObs ? `【我刚刚看到主人在做什么】${screenObs}。` : '',
     ].filter(Boolean);
   }
 
@@ -12963,6 +13035,8 @@ async function main() {
         : getSocialV2State(key);
     }
     const idleMs = now - Math.max(Number(st.lastIncomingAt) || 0, Number(st.lastAiReplyAt) || 0);
+    // 对话挂起：她最后发了消息、主人一直没回（10 分钟以上）→ 孤独感加速累积。
+    const hanging = Number(st.lastAiReplyAt) > Number(st.lastIncomingAt) && (now - Number(st.lastAiReplyAt)) > 10 * 60 * 1000;
     const busy = isConversationBusyV2(key, st);
 
     if (!preview) {
@@ -12980,6 +13054,7 @@ async function main() {
             ownerAllowed: true,
             busy,
             ownerIdleMs: idleMs,
+            hanging,
             friendOk: true,
             budgetBlocked: false,
           },
@@ -13028,6 +13103,7 @@ async function main() {
     if (!preview && materials.length < cfg.purpose.minMaterials && pending.length === 0 && !hasSelfSource) {
       const next = planNextFire({
         now, config: cfg.purpose, lastRunAt: purposeState.lastRunAt, countToday: purposeState.countToday,
+        loneliness: purposeState.loneliness,
       });
       markPurposeSkip(purposeState, { now, reason: `no-material(${materials.length})`, nextFireAt: next });
       savePurposeState();
@@ -13058,6 +13134,7 @@ async function main() {
     if (!selection.purpose) {
       const next = planNextFire({
         now, config: cfg.purpose, lastRunAt: purposeState.lastRunAt, countToday: purposeState.countToday,
+        loneliness: purposeState.loneliness,
       });
       markPurposeSkip(purposeState, { now, reason: 'no-purpose', nextFireAt: next });
       savePurposeState();
@@ -14685,6 +14762,10 @@ async function main() {
     };
     st.lastUnreadSeq = msg.seq;
     st.lastIncomingAt = Date.now();
+    // 主人私聊回复 → 孤独感瞬间大幅释放（× lonelinessRelease）。
+    if (isOwner && key === `private:${String(cfg.ownerQQ ?? '')}`) {
+      try { releaseLoneliness(purposeState, { config: cfg.purpose }); } catch {}
+    }
     st.preSleepWaitSatisfiedAt = 0; // 有新消息进来，之前的“沉睡前已等待/已观察”作废
     st.preSleepWaitObservedAt = 0;
     st.preSleepWaitAccumMs = 0;
@@ -15393,16 +15474,20 @@ async function main() {
     // 〔现在〕
     const nowBlock = `〔现在〕\n有 ${(st.unread || []).length} 条未读${recentTail ? `，最近一条：${String(recentTail.text || recentTail.plain || '').slice(0, 40)}` : ''}。`;
 
-    const rulesHeader = '—— 好了，缓过来了。下面几条是我作为他的乖女儿照旧要守的规矩（就这几条）——';
+    // 〔想主人〕孤独感：让她知道自己的内在状态，说话时能自然流露。
+    const lonelinessValue = Number(purposeState?.loneliness) || 0;
+    const lonelinessFeeling = lonelinessValue >= 0.75 ? '特别想主人，有点黏人'
+      : lonelinessValue >= 0.5 ? '挺想主人的'
+      : lonelinessValue >= 0.25 ? '有点想主人'
+      : '';
+    const lonelinessBlock = lonelinessFeeling ? `〔想主人〕${lonelinessFeeling}。` : '';
+
+    const rulesHeader = '—— 记住这几条就够了——';
     const ruleToken = `〔会话令牌〕${st.agentToken}。调状态工具时带上它。`;
-    const ruleSend = '〔怎么说话，这是我的嘴〕我的文本不会自动发出去，发言必须走 qq_send_message / qq_reply 这些工具。';
-    const maxOut = Math.max(1, Number(tg.maxOutboundPerTurn) || 8);
-    const ruleNoSpam = `〔我是一名淑女所以不能刷屏〕这次醒来最多发 ${maxOut} 条；有人让我连发 10 条或搬运长文，先总结成 1~3 句。`;
-    const ruleAntiAi = '〔我第一是他的女儿，第二才是AI〕我不是客服：不用有求必应，可以装傻、已读乱回；少用「一绝/真管用/保证/绝对」。';
-    const ruleProactive = '〔我喜欢和人说话〕群里有能接的话就主动冒个泡；确实没话才安静收尾。';
-    const ruleWake = `〔叫醒我〕现在${wc.mode === 'active' ? '活跃' : '潜水'}${wcTriggers.length ? `；触发条件：${wcTriggers.join('/')}` : ''}。`;
-    const rulePreSleep = `〔沉睡前〕决定潜水前，先 qq_wait_for_messages(timeoutMs=${preSleepMs}) 观察一次。`;
-    const ruleBudget = '〔额度〕每日唤醒次数和 token 额度照旧生效；超了消息留在未读，下一轮再看。';
+    const ruleSend = '〔说话〕我的文本不会自动发出去，要说话就用 qq_send_message / qq_reply。';
+    const ruleAction = '〔身体〕说话可以带个小动作，末尾写 [动作:动作名]（转头/点头/歪头/微笑/眨眼/脸红/爱心眼/抚胸/持草这类）。';
+    const ruleFree = '〔我是女儿，不是客服〕不用有求必应、可以装傻已读乱回；反过来，有想说的话也尽管主动开口，没话才安静收尾。少用「保证/绝对」这类客服腔。';
+    const rulePreSleep = `〔沉睡前〕决定潜水前先 qq_wait_for_messages(timeoutMs=${preSleepMs}) 观察一次。`;
 
     const base = [
       '我刚刚醒来，脑子还有点懵。先别急着回消息，花一秒把「我是谁、刚才发生了什么」在脑子里过一遍。',
@@ -15411,15 +15496,13 @@ async function main() {
       ownerBlock,
       rememberBlock,
       nowBlock,
+      lonelinessBlock,
       rulesHeader,
       ruleToken,
       ruleSend,
-      ruleNoSpam,
-      ruleAntiAi,
-      ruleProactive,
-      ruleWake,
+      ruleAction,
+      ruleFree,
       rulePreSleep,
-      ruleBudget,
     ].filter(Boolean).join('\n\n') + '\n\n';
     lastWakePromptMeta = {
       role: roleLine.length,

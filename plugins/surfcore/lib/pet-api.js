@@ -30,7 +30,7 @@ const PET_BODY_LIMIT = 256 * 1024;
  * @param {() => string} opts.currentDshUrl   DSH 当前 Web 地址
  * @param {(msg:string, ...args:any[])=>void} [opts.pluginLog]
  */
-export function createPetApiService({ chat, purpose, petService, stateDir, currentDshUrl, pluginLog = () => {}, version = '' }) {
+export function createPetApiService({ chat, purpose, petService, screen, stateDir, currentDshUrl, pluginLog = () => {}, version = '' }) {
   const root = path.join(stateDir, 'pet');
   const hostFile = path.join(root, 'host.json');
   let lastHostWrite = 0;
@@ -136,8 +136,22 @@ export function createPetApiService({ chat, purpose, petService, stateDir, curre
     if (req.method === 'GET' && suffix === '/history') {
       const limit = Number(url.searchParams.get('limit')) || 60;
       const identity = url.searchParams.get('identity') === 'guest' ? 'guest' : 'owner';
-      json(res, 200, chat.history(limit, identity));
+      const characterId = String(url.searchParams.get('characterId') || '');
+      json(res, 200, chat.history(limit, identity, characterId));
       return;
+    }
+    // 屏幕感知（陪看）：查状态 / 改配置（开关、频率、冷却、模型）
+    if (suffix === '/screen') {
+      if (req.method === 'GET') {
+        json(res, 200, screen ? screen.status() : { ok: false, error: '屏幕感知不可用' });
+        return;
+      }
+      if (req.method === 'POST') {
+        let body = {};
+        try { body = JSON.parse((await readBody(req, PET_BODY_LIMIT)) || '{}'); } catch {}
+        json(res, 200, screen ? screen.setConfig(body) : { ok: false, error: '屏幕感知不可用' });
+        return;
+      }
     }
     // 目的机制（桌宠载体）的只读状态 / 预览 / 手动出发。
     // 设置页走的是带 DSH 会话的 /dsh-surfcore/api/purpose；这几个是给桌宠侧
@@ -167,6 +181,7 @@ export function createPetApiService({ chat, purpose, petService, stateDir, curre
         identity: body.identity === 'guest' ? 'guest' : 'owner',
         web: body.web === true,
         debug: body.debug === true,
+        characterId: typeof body.characterId === 'string' ? body.characterId : '',
       });
       json(res, result.ok ? 200 : 400, result);
       return;

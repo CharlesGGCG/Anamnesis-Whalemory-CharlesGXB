@@ -23,7 +23,7 @@ import { sliceHead, wellFormed } from '../../../src/safe-text.js';
 import { readBiliConfig, readQqConfig, readUnified, writeJsonAtomic } from './store.js';
 import { resolvePersonaFile } from './persona.js';
 import { memoryCardPromptBlock } from './memory-card.js';
-import { activeMemoryPaths, readCurrentCharacter, readPersonaLayerText } from '../../../src/character-persona.js';
+import { activeMemoryPaths, characterPaths, readCurrentCharacter, readManifest, readPersonaLayerText } from '../../../src/character-persona.js';
 import { buildPersonaIdentity, personaNameFromCard } from '../../../src/persona-identity.js';
 import { composePersonaLayers } from '../../../src/persona-layers.js';
 import { adminFromSources } from '../../../src/admin-identity.js';
@@ -322,14 +322,30 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
   }
 
   // ── 角色 / 身份 / 记忆 ──────────────────────────────────────────────────
-  function roleInfo() {
+  function roleInfo(characterId = '') {
     let cur = null;
-    try { cur = readCurrentCharacter(); } catch {}
     let personaFile = '';
-    try { personaFile = resolvePersonaFile() || ''; } catch {}
-    const split = unifiedConfig()?.persona?.mode === 'split';
-    const personaCore = personaFile ? textFile(personaFile) : '';
-    const fullPersona = split ? personaCore : (readPersonaLayerText('full') || personaCore);
+    let fullPersona = '';
+    if (characterId) {
+      // 指定角色：读该角色目录的整卡（聊天室多 AI 用）。
+      try {
+        const p = characterPaths(characterId);
+        const m = readManifest(characterId);
+        if (m) {
+          cur = { id: characterId, name: m.name };
+          personaFile = p.persona;
+          fullPersona = textFile(p.personaFull) || textFile(p.persona);
+        }
+      } catch {}
+    }
+    if (!fullPersona) {
+      try { cur = readCurrentCharacter(); } catch {}
+      try { personaFile = resolvePersonaFile() || ''; } catch {}
+      const split = unifiedConfig()?.persona?.mode === 'split';
+      const personaCore = personaFile ? textFile(personaFile) : '';
+      fullPersona = split ? personaCore : (readPersonaLayerText('full') || personaCore);
+    }
+    const split = !characterId && unifiedConfig()?.persona?.mode === 'split';
     const persona = composePersonaLayers({
       core: fullPersona,
       // 身份底座：桌宠也要知道“我是谁、主人是谁”，不依赖用户是否拆分人格。
@@ -348,7 +364,7 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
       const heading = persona.match(/^#\s*([^\n#]{1,40})/m);
       name = heading ? heading[1].trim() : '小肥鱼';
     }
-    return { id: cur?.id || '', name, persona, personaFile, hasPersona: Boolean(persona) };
+    return { id: cur?.id || characterId || '', name, persona, personaFile, hasPersona: Boolean(persona) };
   }
 
   function memoryBlock() {
@@ -409,19 +425,19 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
 
   // ── 历史 ────────────────────────────────────────────────────────────────
   // 主人（桌宠 / 开发者）与访客各用一份历史，避免把主人的私聊漏给访客。
-  function historyFile(identity = 'owner') {
-    const role = roleInfo();
+  function historyFile(identity = 'owner', characterId = '') {
+    const role = characterId ? { id: characterId } : roleInfo();
     const id = role.id || 'default';
     const suffix = identity === 'guest' ? '-guest' : '';
     return path.join(chatDir, `history-${id.replace(/[^a-zA-Z0-9_-]/g, '') || 'default'}${suffix}.json`);
   }
 
-  function readHistory(identity = 'owner') {
-    const raw = readJson(historyFile(identity), null);
+  function readHistory(identity = 'owner', characterId = '') {
+    const raw = readJson(historyFile(identity, characterId), null);
     const messages = Array.isArray(raw?.messages) ? raw.messages : [];
     return {
       version: 1,
-      characterId: String(raw?.characterId || roleInfo().id || ''),
+      characterId: String(raw?.characterId || characterId || roleInfo().id || ''),
       messages: messages.filter((m) => m && (m.role === 'user' || m.role === 'assistant') && m.text).slice(-MAX_HISTORY_MESSAGES),
       lastUserAt: Number(raw?.lastUserAt) || 0,
       lastProactiveAt: Number(raw?.lastProactiveAt) || 0,
@@ -429,10 +445,10 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
     };
   }
 
-  function saveHistory(history, identity = 'owner') {
+  function saveHistory(history, identity = 'owner', characterId = '') {
     ensureDirs();
     try {
-      writeJsonAtomic(historyFile(identity), {
+      writeJsonAtomic(historyFile(identity, characterId), {
         version: 1,
         characterId: history.characterId,
         messages: history.messages.slice(-MAX_HISTORY_MESSAGES),
@@ -827,7 +843,7 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
   }
 
   // ── 对外：聊天 ──────────────────────────────────────────────────────────
-  async function chat({ text = '', modality = 'text', identity = 'owner', web = false, debug = false } = {}) {
+  async function chat({ text = '', modality = 'text', identity = 'owner', web = false, debug = false, characterId = '' } = {}) {
     const s = settings();
     if (!s.chat.enabled) return { ok: false, error: '桌宠对话已关闭（设置 → 桌宠 → 对话）' };
     const say = sliceHead(String(text ?? '').trim(), MAX_INPUT_CHARS);
@@ -847,8 +863,8 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
 
     inFlight += 1;
     const startedAt = Date.now();
-    const history = readHistory(who);
-    const role = roleInfo();
+    const history = readHistory(who, characterId);
+    const role = roleInfo(characterId);
     const owner = ownerInfo();
     const speaker = who === 'guest' ? '访客' : owner.name;
     // 记忆图谱召回：把「想起的旧事」加进 system（失败退化成空，不阻塞）
@@ -893,7 +909,7 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
       appendMessage(history, aiMessage);
       history.lastUserAt = now;
       history.lastAssistantAt = now;
-      saveHistory(history, who);
+      saveHistory(history, who, characterId);
       const remembered = rememberEvents(buildPetMemoryEvents({
         userText: say,
         replyText: reply,
@@ -991,9 +1007,9 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
     };
   }
 
-  function historyPayload(limit = 60, identity = 'owner') {
-    const history = readHistory(identity);
-    const role = roleInfo();
+  function historyPayload(limit = 60, identity = 'owner', characterId = '') {
+    const history = readHistory(identity, characterId);
+    const role = roleInfo(characterId);
     return {
       ok: true,
       role: { id: role.id, name: role.name },

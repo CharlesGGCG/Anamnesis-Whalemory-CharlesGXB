@@ -44,6 +44,17 @@ export const DEFAULT_PURPOSE_CONFIG = Object.freeze({
   pendingTtlDays: 14,
   maxCandidates: 6,
   promptMaxChars: 16000,
+  // 孤独感（loneliness）：随「主人没说话」和「对话挂起」累积，驱动主动说话的频率。
+  lonelinessTauMs: 120 * 60 * 1000,      // 满孤独时间：约 2 小时不联系 → 孤独感到 1（叠加增长基准）
+  lonelinessPower: 2,                   // 叠加指数：>1 = 时间越长增长越快（2=平方，3=立方）
+  lonelinessHangBoost: 2.0,              // 对话挂起（发了消息没回）时累积加速倍数
+  lonelinessRelease: 0.3,                // 主人回复后孤独感回落到当前值的 30%
+  lonelinessGapFloor: 0.3,               // loneliness=1 时主动说话间隔缩到原 gap 的 30%
+  lonelinessSmoothMs: 10 * 60 * 1000,    // 孤独感平滑过渡时间常数（避免跳变）
+  // 主人作息（择时）：工作日上学时段孤独感照常累积、但抑制主动说话。
+  schoolDays: [1, 2, 3, 4, 5],           // getDay()：1=周一 .. 5=周五
+  schoolStart: '08:00',
+  schoolEnd: '15:00',
 });
 
 const MINUTE = 60 * 1000;
@@ -166,6 +177,17 @@ export function normalizePurposeConfig(input = {}, { ownerQQ = '' } = {}) {
     pendingTtlDays: clampInt(src.pendingTtlDays, DEFAULT_PURPOSE_CONFIG.pendingTtlDays, 1, 90),
     maxCandidates: clampInt(src.maxCandidates, DEFAULT_PURPOSE_CONFIG.maxCandidates, 3, 10),
     promptMaxChars: clampInt(src.promptMaxChars, DEFAULT_PURPOSE_CONFIG.promptMaxChars, 4000, 30000),
+    lonelinessTauMs: clampInt(src.lonelinessTauMs, DEFAULT_PURPOSE_CONFIG.lonelinessTauMs, 30 * MINUTE, 12 * HOUR),
+    lonelinessPower: (() => { const n = Number(src.lonelinessPower); return Number.isFinite(n) ? Math.min(4, Math.max(1, n)) : DEFAULT_PURPOSE_CONFIG.lonelinessPower; })(),
+    lonelinessHangBoost: clamp01(src.lonelinessHangBoost, DEFAULT_PURPOSE_CONFIG.lonelinessHangBoost),
+    lonelinessRelease: clamp01(src.lonelinessRelease, DEFAULT_PURPOSE_CONFIG.lonelinessRelease),
+    lonelinessGapFloor: clamp01(src.lonelinessGapFloor, DEFAULT_PURPOSE_CONFIG.lonelinessGapFloor),
+    lonelinessSmoothMs: clampInt(src.lonelinessSmoothMs, DEFAULT_PURPOSE_CONFIG.lonelinessSmoothMs, MINUTE, 6 * HOUR),
+    schoolDays: Array.isArray(src.schoolDays) && src.schoolDays.length
+      ? src.schoolDays.map(Number).filter((n) => Number.isFinite(n) && n >= 1 && n <= 7)
+      : DEFAULT_PURPOSE_CONFIG.schoolDays.slice(),
+    schoolStart: parseClock(src.schoolStart, DEFAULT_PURPOSE_CONFIG.schoolStart).text,
+    schoolEnd: parseClock(src.schoolEnd, DEFAULT_PURPOSE_CONFIG.schoolEnd).text,
   };
 }
 
@@ -197,6 +219,9 @@ export function createPurposeState(now = Date.now()) {
     pending: [],
     history: [],
     lastSkip: null,
+    // 孤独感（0~1）：随「主人没说话」和「对话挂起」累积，主人回复后回落。
+    loneliness: 0,
+    lonelinessAt: now,
   };
 }
 
@@ -291,6 +316,58 @@ export function ensurePurposeSchedule(state, { now = Date.now(), config = DEFAUL
   return state;
 }
 
+// ── 孤独感（loneliness）· 2026-11-13 ────────────────────────────────
+// 驱动主动说话频率的情绪状态（0~1）：随「主人没说话」和「对话挂起」累积，
+// 主人回复后回落；工作日上学时段只累积、不释放（等放学）。
+
+/** 是否在「主人上学时段」（工作日 schoolStart~schoolEnd）。 */
+export function inSchoolHours(now = Date.now(), config = DEFAULT_PURPOSE_CONFIG) {
+  const days = Array.isArray(config.schoolDays) ? config.schoolDays : [];
+  if (!days.length) return false;
+  if (!days.includes(new Date(now).getDay())) return false;
+  const s = parseClock(config.schoolStart, '08:00');
+  const e = parseClock(config.schoolEnd, '15:00');
+  const sM = s.hh * 60 + s.mm;
+  const eM = e.hh * 60 + e.mm;
+  if (eM <= sM) return false;
+  const m = minutesOfDay(now);
+  return m >= sM && m < eM;
+}
+
+/** 下一个「放学」时刻（把主动说话推到放学后）。 */
+export function schoolEndAfter(now = Date.now(), config = DEFAULT_PURPOSE_CONFIG) {
+  const e = parseClock(config.schoolEnd, '15:00');
+  const d = new Date(now);
+  const at = new Date(d.getFullYear(), d.getMonth(), d.getDate(), e.hh, e.mm, 0, 0).getTime();
+  return at > now ? at : at + DAY;
+}
+
+/** 更新孤独感（就地）：向「目标孤独感」平滑逼近。ownerIdleMs 越大越孤独，hanging 加速。 */
+export function updateLoneliness(state, { now = Date.now(), config = DEFAULT_PURPOSE_CONFIG, ownerIdleMs = null, hanging = false } = {}) {
+  const prevAt = Number(state?.lonelinessAt) || now;
+  const dt = Math.max(0, now - prevAt);
+  state.lonelinessAt = now;
+  if (dt <= 0) return state;
+  const idle = ownerIdleMs != null && Number.isFinite(Number(ownerIdleMs)) ? Math.max(0, Number(ownerIdleMs)) : 0;
+  const tau = Math.max(MINUTE, Number(config.lonelinessTauMs) || DEFAULT_PURPOSE_CONFIG.lonelinessTauMs);
+  const boost = hanging ? Math.max(1, Number(config.lonelinessHangBoost) || 1) : 1;
+  const power = Math.max(1, Number(config.lonelinessPower) || DEFAULT_PURPOSE_CONFIG.lonelinessPower);
+  // 叠加增长：幂次函数 (idle/tau)^power，power>1 时时间越长增长越快（先慢后快）。
+  const target = clamp01(Math.pow((idle * boost) / tau, power), 0);
+  const smooth = Math.max(MINUTE, Number(config.lonelinessSmoothMs) || DEFAULT_PURPOSE_CONFIG.lonelinessSmoothMs);
+  const alpha = 1 - Math.exp(-dt / smooth);
+  const prev = clamp01(state.loneliness, 0);
+  state.loneliness = clamp01(prev + (target - prev) * alpha, 0);
+  return state;
+}
+
+/** 主人回复后释放孤独感：回落到当前值 × lonelinessRelease。 */
+export function releaseLoneliness(state, { config = DEFAULT_PURPOSE_CONFIG } = {}) {
+  const r = clamp01(Number(config.lonelinessRelease), DEFAULT_PURPOSE_CONFIG.lonelinessRelease);
+  state.loneliness = clamp01(clamp01(state.loneliness, 0) * r, 0);
+  return state;
+}
+
 /**
  * 下一次该在什么时候主动找主人。
  * · 距上次「真正完成」至少 gapMin~gapMax；
@@ -303,10 +380,16 @@ export function planNextFire({
   lastRunAt = 0,
   countToday = 0,
   random = Math.random,
+  loneliness = 0,
 } = {}) {
   const min = Math.max(5 * MINUTE, Number(config.gapMinMs) || DEFAULT_PURPOSE_CONFIG.gapMinMs);
   const max = Math.max(min, Number(config.gapMaxMs) || min);
-  const gap = Math.round(min + random() * (max - min));
+  // 孤独感调制：loneliness 越高，间隔越短（floor = 保留的最短比例）。
+  const floor = clamp01(Number(config.lonelinessGapFloor), DEFAULT_PURPOSE_CONFIG.lonelinessGapFloor);
+  const scale = 1 - (1 - floor) * clamp01(loneliness, 0);
+  const effMin = Math.max(5 * MINUTE, Math.round(min * scale));
+  const effMax = Math.max(effMin, Math.round(max * scale));
+  const gap = Math.round(effMin + random() * (effMax - effMin));
   let at;
   if (config.dailyMax > 0 && countToday >= config.dailyMax) {
     at = nextDayStartAfter(now, config);
@@ -332,6 +415,14 @@ function waitUntil(at, reason) {
  */
 export function evaluatePurposeTick({ now = Date.now(), config = DEFAULT_PURPOSE_CONFIG, state, env = {}, random = Math.random } = {}) {
   ensurePurposeDay(state, now);
+  // 更新孤独感：随主人空闲时长 + 对话挂起累积（放最前，保证即使本轮跳过也记账）。
+  const idleMs = Number(env.ownerIdleMs);
+  updateLoneliness(state, {
+    now,
+    config,
+    ownerIdleMs: Number.isFinite(idleMs) ? idleMs : null,
+    hanging: env.hanging === true,
+  });
   if (!config.enabled || env.enabled === false) return waitUntil(0, 'disabled');
   if (env.modeOk === false) return waitUntil(now + 5 * MINUTE, 'mode');
   if (env.dshReady === false) return waitUntil(now + 5 * MINUTE, 'dsh');
@@ -341,6 +432,8 @@ export function evaluatePurposeTick({ now = Date.now(), config = DEFAULT_PURPOSE
     // 安静时段不在每次 tick 上抖动（否则状态文件每分钟都在变）；到点后由 planNextFire 再加随机。
     return waitUntil(quietEndAfter(now, config), 'quiet');
   }
+  // 工作日上学时段：孤独感照常累积（上面已更新），但抑制主动说话，等放学再释放。
+  if (inSchoolHours(now, config)) return waitUntil(schoolEndAfter(now, config), 'school-hours');
   if (config.dailyMax > 0 && state.countToday >= config.dailyMax) {
     return waitUntil(nextDayStartAfter(now, config), 'daily-max');
   }

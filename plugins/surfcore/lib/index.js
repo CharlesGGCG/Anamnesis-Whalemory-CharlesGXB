@@ -72,6 +72,7 @@ import { createGateEventStore } from '../../../src/gate-events.js';
 import { normalizeAllowlist } from '../../../src/allowlist.js';
 import { createPetService, detectElectronPath, installElectronRuntime, ELECTRON_VERSION, electronDownloadUrl } from './pet.js';
 import { createPetChatService } from './pet-chat.js';
+import { createScreenObserver } from './screen-observer.js';
 import { createPetPurposeService } from './pet-purpose.js';
 import { createPetApiService } from './pet-api.js';
 import { createUpdatesService, resumePendingApply } from './updates.js';
@@ -260,11 +261,17 @@ export function apply(ctx) {
   billing.start();
 
   const petChat = createPetChatService({ ctx, stateDir: STATE_DIR, pluginLog, tokenBudget });
+  const screenObserver = createScreenObserver({ ctx, stateDir: STATE_DIR, pluginLog });
+  // 陪看（每 30 秒截屏 + 视觉）默认开；config.screenWatch === false 时完全不起定时器。
+  let screenWatchEnabled = true;
+  try { screenWatchEnabled = readUnified().config?.screenWatch !== false; } catch {}
+  if (screenWatchEnabled) screenObserver.start();
   const petPurpose = createPetPurposeService({ chat: petChat, tokenBudget, pluginLog, callBridge });
   const petApi = createPetApiService({
     chat: petChat,
     purpose: petPurpose,
     petService,
+    screen: screenObserver,
     stateDir: STATE_DIR,
     currentDshUrl,
     pluginLog,
