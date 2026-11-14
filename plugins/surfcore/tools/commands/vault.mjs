@@ -12,7 +12,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import {
-  addFromText, listVault, markVaultDone, removeVaultEntry, vaultPaths, vaultPromptBlock,
+  addFromText, listVault, markVaultDone, removeVaultEntry, vaultPaths, vaultPromptBlock, dueInfo, listDue,
 } from '../../../../src/memory-vault.js'
 
 const argv = process.argv.slice(2)
@@ -25,7 +25,8 @@ for (let i = 1; i < argv.length; i += 1) {
 const flag = (name) => args.get(name) === true || args.has(name)
 
 function printEntry(e) {
-  const due = e.dueAt ? `  截止 ${e.dueAt}` : ''
+  const info = e.dueAt ? dueInfo(e) : { text: '' }
+  const due = e.dueAt ? `  截止 ${e.dueAt}${info.text ? `（${info.text}）` : ''}` : ''
   const hit = e.hits ? `  命中 ${e.hits} 次` : ''
   console.log(`${e.id}  [${e.kind}/${e.status}]  ★${e.importance}${due}${hit}`)
   console.log(`  ${String(e.text).slice(0, 200)}`)
@@ -67,6 +68,14 @@ if (cmd === 'search') {
   process.exit(0)
 }
 
+if (cmd === 'due') {
+  const within = Number(args.get('days')) || 3
+  const rows = listDue({ withinDays: within })
+  if (!rows.length) { console.log(`（${within} 天内没有到期/过期的承诺）`); process.exit(0) }
+  for (const e of rows) printEntry(e)
+  process.exit(0)
+}
+
 if (cmd === 'done' || cmd === 'rm') {
   const id = String(argv[1] ?? '')
   if (!id) { console.error('需要 id'); process.exit(2) }
@@ -101,5 +110,5 @@ if (cmd === 'import-card') {
   process.exit(0)
 }
 
-console.error('用法：add | list | search | done <id> | rm <id> | import-card')
+console.error('用法：add | list | due [--days 3] | search | done <id> | rm <id> | import-card')
 process.exit(2)

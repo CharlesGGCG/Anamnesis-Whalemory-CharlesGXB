@@ -23,7 +23,7 @@ import { sliceHead, wellFormed } from '../../../src/safe-text.js';
 import { readBiliConfig, readQqConfig, readUnified, writeJsonAtomic } from './store.js';
 import { resolvePersonaFile } from './persona.js';
 import { memoryCardPromptBlock } from './memory-card.js';
-import { vaultPromptBlock, promisePromptBlock, pushVaultCandidate, isRememberText } from '../../../src/memory-vault.js';
+import { vaultPromptBlock, promisePromptBlock, dueTodayPromptBlock, pushVaultCandidate, isRememberText } from '../../../src/memory-vault.js';
 import { activeMemoryPaths, characterPaths, readCurrentCharacter, readManifest, readPersonaLayerText } from '../../../src/character-persona.js';
 import { buildPersonaIdentity, personaNameFromCard } from '../../../src/persona-identity.js';
 import { composePersonaLayers } from '../../../src/persona-layers.js';
@@ -879,7 +879,7 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
     // 外置记忆库：只对主人开（访客不能看到主人的私事）；命中才注入 + 承诺清单
     let vaultText = '';
     if (who === 'owner') {
-      try { vaultText = [vaultPromptBlock(say), promisePromptBlock()].filter(Boolean).join('\n') } catch {}
+      try { vaultText = [vaultPromptBlock(say), promisePromptBlock(), dueTodayPromptBlock()].filter(Boolean).join('\n') } catch {}
       try { if (isRememberText(say)) pushVaultCandidate(say, { source: 'web' }) } catch {}
     }
     const system = buildChatSystemPrompt({ role, owner, memory: memoryBlock() + (graphMemory ? `\n${graphMemory}` : ''), purpose: purposeBackground(), modality: mode, identity: who, intimacy, web, vault: vaultText });

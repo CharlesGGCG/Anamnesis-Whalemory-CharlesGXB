@@ -243,19 +243,68 @@ function scoreEntry(entry, text) {
   return score
 }
 
-function renderEntries(entries, { maxChars = 600 } = {}) {
+function renderEntries(entries, { maxChars = 600, now = Date.now() } = {}) {
   const lines = []
   let used = 0
   const kindLabel = { promise: '承诺', fact: '事实', preference: '偏好', event: '事情' }
   for (const e of entries) {
     const label = kindLabel[e.kind] || '事实'
-    const due = e.dueAt ? `（${e.dueAt} 前）` : ''
+    const info = dueInfo(e, now)
+    const due = info.text ? `（${info.text}）` : ''
     const line = `- [${label}] ${String(e.text).slice(0, 90)}${due}`
     if (used + line.length > maxChars) break
     lines.push(line)
     used += line.length + 1
   }
   return lines.join('\n')
+}
+
+/** 到期信息：今天到期 / 明天到期 / 已过期 N 天 / 具体日期前。按北京时间算「天」。 */
+export function dueInfo(entry, now = Date.now()) {
+  const raw = String(entry?.dueAt ?? '').trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return { text: '', days: null }
+  const due = Date.parse(`${raw}T00:00:00+08:00`)
+  if (!Number.isFinite(due)) return { text: '', days: null }
+  const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date(now))
+  const todayStart = Date.parse(`${today}T00:00:00+08:00`)
+  if (!Number.isFinite(todayStart)) return { text: '', days: null }
+  const days = Math.round((due - todayStart) / 86_400_000)
+  if (days < 0) return { text: `已过期 ${-days} 天`, days }
+  if (days === 0) return { text: '今天到期', days }
+  if (days === 1) return { text: '明天到期', days }
+  return { text: `${raw} 前`, days }
+}
+
+/** 列出 N 天内到期/已过期的承诺（CLI 用）。 */
+export function listDue({ withinDays = 3, file = vaultPaths().file, now = Date.now() } = {}) {
+  const vault = loadVault({ file })
+  return vault.entries
+    .filter((e) => e.kind === 'promise' && e.status === 'pending')
+    .map((e) => ({ entry: e, info: dueInfo(e, now) }))
+    .filter((x) => x.info.days !== null && x.info.days <= withinDays)
+    .sort((a, b) => a.info.days - b.info.days)
+    .map((x) => ({ ...x.entry, dueText: x.info.text, dueDays: x.info.days }))
+}
+
+/**
+ * 到期提醒：今天到期 / 已经过期的承诺，20 小时最多注入一次。
+ * 不管关键词有没有命中都要出现——「答应的事」漏一次就是事故。
+ */
+export function dueTodayPromptBlock({ limit = 5, maxChars = 400, minGapMs = 20 * 60 * 60 * 1000, ignoreGap = false, touch = true, file = vaultPaths().file, now = Date.now() } = {}) {
+  try {
+    const vault = loadVault({ file })
+    const last = Number(vault.meta?.lastDuePromptAt) || 0
+    if (!ignoreGap && last && now - last < minGapMs) return ''
+    const due = vault.entries
+      .filter((e) => e.kind === 'promise' && e.status === 'pending')
+      .map((e) => ({ e, info: dueInfo(e, now) }))
+      .filter((x) => x.info.days !== null && x.info.days <= 0)
+      .sort((a, b) => a.info.days - b.info.days)
+      .slice(0, limit)
+    if (!due.length) return ''
+    if (touch) { vault.meta = { ...(vault.meta || {}), lastDuePromptAt: now }; saveVault(vault, { file }) }
+    return `〔今天必须处理的事（承诺到期）〕\n${renderEntries(due.map((x) => x.e), { maxChars, now })}`
+  } catch { return '' }
 }
 
 /**

@@ -6,7 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 import {
   addFromText, addVaultEntry, listVault, markVaultDone, vaultPromptBlock, promisePromptBlock,
-  extractKeywordsRule, isPromiseText, loadVault,
+  extractKeywordsRule, isPromiseText, loadVault, dueInfo, listDue, dueTodayPromptBlock,
   pushVaultCandidate, takeVaultCandidates, commitVaultCandidates, rollbackVaultCandidates,
 } from '../src/memory-vault.js'
 
@@ -75,5 +75,28 @@ assert.equal(takeVaultCandidates({ file: inbox }).items.length, 1)
 assert.deepEqual(takeVaultCandidates({ file: path.join(dir, 'nope.jsonl') }).items, [])
 assert.equal(loadVault({ file: path.join(dir, 'nope.json') }).entries.length, 0)
 
+// 10) 承诺到期：dueInfo 按北京时间算天；dueTodayPromptBlock 只列今天/过期；20h 冷却
+const dueFile = path.join(dir, 'due.json')
+const T1 = Date.parse('2026-11-14T12:00:00Z') // 北京时间 2026-11-14 20:00
+addVaultEntry({ kind: 'promise', text: '今天要交的作业', dueAt: '2026-11-14' }, { file: dueFile, now: T1 })
+addVaultEntry({ kind: 'promise', text: '前天就该做的事', dueAt: '2026-11-12' }, { file: dueFile, now: T1 })
+addVaultEntry({ kind: 'promise', text: '下周才到期的事', dueAt: '2026-11-20' }, { file: dueFile, now: T1 })
+addVaultEntry({ kind: 'fact', text: '生日是 11 月 20 日', dueAt: '2026-11-14' }, { file: dueFile, now: T1 })
+assert.equal(dueInfo({ dueAt: '2026-11-14' }, T1).text, '今天到期')
+assert.equal(dueInfo({ dueAt: '2026-11-12' }, T1).text, '已过期 2 天')
+assert.equal(dueInfo({ dueAt: '2026-11-15' }, T1).text, '明天到期')
+assert.equal(dueInfo({ dueAt: '2026-11-20' }, T1).days, 6)
+assert.equal(dueInfo({ dueAt: '' }, T1).days, null)
+
+const dueRows = listDue({ withinDays: 3, file: dueFile, now: T1 })
+assert.equal(dueRows.length, 2, '只列今天/过期，不列下周和 fact')
+
+const d1 = dueTodayPromptBlock({ file: dueFile, now: T1 })
+assert.match(d1, /今天必须处理的事/)
+assert.match(d1, /今天要交的作业/)
+assert.match(d1, /前天就该做的事/)
+assert.equal(dueTodayPromptBlock({ file: dueFile, now: T1 + 3600_000 }), '', '20 小时内不重复')
+assert.match(dueTodayPromptBlock({ file: dueFile, now: T1 + 21 * 3600_000 }), /今天要交的作业/)
+
 fs.rmSync(dir, { recursive: true, force: true })
-console.log('ok memory-vault: 写入/命中/承诺/去重/队列 9 组断言通过')
+console.log('ok memory-vault: 写入/命中/承诺/去重/队列/到期 10 组断言通过')
