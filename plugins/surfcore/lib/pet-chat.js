@@ -23,6 +23,7 @@ import { sliceHead, wellFormed } from '../../../src/safe-text.js';
 import { readBiliConfig, readQqConfig, readUnified, writeJsonAtomic } from './store.js';
 import { resolvePersonaFile } from './persona.js';
 import { memoryCardPromptBlock } from './memory-card.js';
+import { vaultPromptBlock, promisePromptBlock, pushVaultCandidate, isRememberText } from '../../../src/memory-vault.js';
 import { activeMemoryPaths, characterPaths, readCurrentCharacter, readManifest, readPersonaLayerText } from '../../../src/character-persona.js';
 import { buildPersonaIdentity, personaNameFromCard } from '../../../src/persona-identity.js';
 import { composePersonaLayers } from '../../../src/persona-layers.js';
@@ -773,7 +774,7 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
   }
 
   // ── 提示词 ──────────────────────────────────────────────────────────────
-  function buildChatSystemPrompt({ role, owner, memory, purpose, modality, identity = 'owner', intimacy = 100, web = false }) {
+  function buildChatSystemPrompt({ role, owner, memory, purpose, modality, identity = 'owner', intimacy = 100, web = false, vault = '' }) {
     const s = settings();
     const ownerName = String(owner?.name || '主人').trim();
     const isGuest = web && identity === 'guest';
@@ -794,6 +795,11 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
     if (memory) {
       lines.push('【记忆卡（你记得的事；越早的事记得越模糊，别把模糊的事说得很确定）】');
       lines.push(sliceHead(memory, 2600));
+      lines.push('');
+    }
+    if (vault) {
+      lines.push('【记忆库（你专门记下来的事；只在相关时自然提起，别硬背）】');
+      lines.push(sliceHead(vault, 900));
       lines.push('');
     }
     const bits = [];
@@ -870,7 +876,13 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
     // 记忆图谱召回：把「想起的旧事」加进 system（失败退化成空，不阻塞）
     let graphMemory = '';
     try { graphMemory = await graphRecallBlock(say) } catch {}
-    const system = buildChatSystemPrompt({ role, owner, memory: memoryBlock() + (graphMemory ? `\n${graphMemory}` : ''), purpose: purposeBackground(), modality: mode, identity: who, intimacy, web });
+    // 外置记忆库：只对主人开（访客不能看到主人的私事）；命中才注入 + 承诺清单
+    let vaultText = '';
+    if (who === 'owner') {
+      try { vaultText = [vaultPromptBlock(say), promisePromptBlock()].filter(Boolean).join('\n') } catch {}
+      try { if (isRememberText(say)) pushVaultCandidate(say, { source: 'web' }) } catch {}
+    }
+    const system = buildChatSystemPrompt({ role, owner, memory: memoryBlock() + (graphMemory ? `\n${graphMemory}` : ''), purpose: purposeBackground(), modality: mode, identity: who, intimacy, web, vault: vaultText });
     const user = [
       history.messages.length ? '【最近聊天】' : '',
       history.messages.length ? formatHistory(history, s.chat.historyTurns, say, speaker) : say,

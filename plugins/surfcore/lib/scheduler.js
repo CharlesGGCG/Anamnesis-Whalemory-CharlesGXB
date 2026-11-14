@@ -34,6 +34,7 @@ import {
 import { resolvePersonaFile } from './persona.js'
 import { readUnified } from './store.js'
 import { memoryCardPromptBlock } from './memory-card.js'
+import { promisePromptBlock } from '../../../src/memory-vault.js'
 import { buildSelfIdentityBlock, readQqSelfIdentity } from '../../../src/self-identity.js'
 import { adminFromSources, adminPromptBlock } from '../../../src/admin-identity.js'
 import { activeMemoryPaths, activePlatformStateDir, readPersonaLayerText } from '../../../src/character-persona.js'
@@ -244,8 +245,12 @@ function memoryCardBlockForBili() {
   return memoryCardPromptBlock('bili')
 }
 
-/** 每次唤醒都放在最前面的合体上下文（顺序：人设 → 自我锚点 → 管理员 → 对齐 → QQ 记忆 → 记忆卡）。 */
+/** 每次唤醒都放在最前面的合体上下文（顺序：人设 → 自我锚点 → 管理员 → 对齐 → QQ 记忆 → 记忆卡 → 承诺）。 */
 function identityContextLines() {
+  // 承诺清单：B站 这边每次醒来都带（ignoreGap），但只列「还没兑现」的；
+  // 这是她自己的备忘，公开场要不要说出来由她判断。
+  let promiseBlock = ''
+  try { promiseBlock = promisePromptBlock({ ignoreGap: true, touch: false }) } catch {}
   return [
     personaCardBlock(),
     selfIdentityBlockForBili(),
@@ -253,6 +258,7 @@ function identityContextLines() {
     alignmentBlockForBili(),
     qqMemoryBlockForBili(),
     memoryCardBlockForBili(),
+    promiseBlock,
   ].filter(Boolean)
 }
 

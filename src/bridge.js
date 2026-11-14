@@ -90,6 +90,7 @@ import {
   readVectorIndex, renderVectorRecallBlock, resolveVectorMemoryPaths,
 } from './vector-memory.js';
 import { getMemoryGraph, graphRecallBlock } from './memory-graph.js';
+import { vaultPromptBlock, promisePromptBlock, pushVaultCandidate, isRememberText } from './memory-vault.js';
 import {
   activeMemoryPaths, activePersonaFile, activePlatformStateDir, characterPaths, readCurrentCharacter,
   readPersonaLayerText,
@@ -15373,6 +15374,18 @@ async function main() {
     const replyLine = `【首回复节奏】先处理已有消息，完整的问题及时回答。需要确认对方是否继续补充时，用 qq_wait_for_messages(purpose="reply", quietMs=${replyTiming.quietMs})；从最后来信计时，合批和读提示词的耗时也算，目前还差约 ${Math.ceil(replyTiming.remainingQuietMs / 1000)} 秒静默。已安静够久可直接回，工具也会立即返回并补上思考期间的新消息。只有明确没说完、你确实要等下文时，才用普通 messages 长等待。\n\n`;
     const preSleepLine = `【沉睡前强制等待】这是决定**潜水**时的步骤，不是首回复的前置条件，也不是自然收尾（qq_close_conversation）的前置条件。除非对方明确说“不聊了/晚安/下了/拜拜”等结束语，否则每次设置潜水/下一次唤醒前，必须先调用 qq_wait_for_messages(timeoutMs=${preSleepMs}) 完成一次沉睡前观察；回复前 purpose="reply" 的短静默不能代替这次完整观察。若 ${Math.round(preSleepMs / 60000)} 分钟内没人说话，返回 preSleepWaitSatisfied=true，可以设置下一次唤醒并沉睡；若期间有人发新消息，先查看返回的 newMessages——判断不需要你参与就可以直接沉睡，若你选择参与回复，则下次想睡时需要重新等待观察窗口。如果返回里带 preSleepWaitRemainingMs，就按剩余时间继续等待。\n\n`;
     const lastMsg = [...(Array.isArray(st.recentMessages) ? st.recentMessages : [])].reverse().find((m) => m && !m.isSelf);
+    // 〔记忆库〕外置关键词记忆：命中才注入，不占常驻容量；承诺清单 4 小时最多一次。
+    // （2026-11-14：唤醒正文真正生效的只有 base 数组，所以这里必须进 base，不能只算长度）
+    let vaultBlock = '';
+    try {
+      const lastUserText = String(lastMsg?.text || lastMsg?.plain || '').trim();
+      const vaultText = [vaultPromptBlock(lastUserText), promisePromptBlock()].filter(Boolean).join('\n');
+      vaultBlock = vaultText ? `${vaultText}\n` : '';
+      const lastAt = Number(lastMsg?.at || lastMsg?.time || 0);
+      if (lastUserText && isRememberText(lastUserText) && (!lastAt || Date.now() - lastAt < 10 * 60_000)) {
+        pushVaultCandidate(lastUserText, { source: 'qq' });
+      }
+    } catch {}
     const lastAiMin = st.lastAiReplyAt ? Math.max(0, Math.round((Date.now() - Number(st.lastAiReplyAt)) / 60000)) : null;
     const statusBits = [`未读 ${(st.unread || []).length} 条`];
     if (lastMsg) statusBits.push(`最近一条来自 ${String(lastMsg.sender || '未知')}：${String(lastMsg.text || lastMsg.plain || '').slice(0, 30)}`);
@@ -15497,6 +15510,7 @@ async function main() {
       justBlock,
       ownerBlock,
       rememberBlock,
+      vaultBlock,
       nowBlock,
       lonelinessBlock,
       rulesHeader,

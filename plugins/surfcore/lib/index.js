@@ -74,6 +74,7 @@ import { createPetService, detectElectronPath, installElectronRuntime, ELECTRON_
 import { createPetChatService } from './pet-chat.js';
 import { createScreenObserver } from './screen-observer.js';
 import { createGraphOutboxDrain } from './graph-outbox.js';
+import { createVaultInboxDrain } from './vault-inbox.js';
 import { createPetPurposeService } from './pet-purpose.js';
 import { createPetApiService } from './pet-api.js';
 import { createUpdatesService, resumePendingApply } from './updates.js';
@@ -270,6 +271,9 @@ export function apply(ctx) {
   // B站 捕获：工具进程往 graph-outbox.jsonl 追加，这里每分钟统一入记忆图谱。
   const graphOutbox = createGraphOutboxDrain({ pluginLog });
   graphOutbox.start();
+  // 记忆库：把「答应/记住/生日」这类候选句抽词入库（外置、不占记忆卡容量）。
+  const vaultInbox = createVaultInboxDrain({ pluginLog });
+  vaultInbox.start();
   const petPurpose = createPetPurposeService({ chat: petChat, tokenBudget, pluginLog, callBridge });
   const petApi = createPetApiService({
     chat: petChat,
