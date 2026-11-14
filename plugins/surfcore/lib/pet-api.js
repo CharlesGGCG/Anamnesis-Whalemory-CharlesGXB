@@ -182,6 +182,7 @@ export function createPetApiService({ chat, purpose, petService, screen, stateDi
         web: body.web === true,
         debug: body.debug === true,
         characterId: typeof body.characterId === 'string' ? body.characterId : '',
+        lounge: body.lounge === true,
       });
       json(res, result.ok ? 200 : 400, result);
       return;

@@ -775,12 +775,15 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
   }
 
   // ── 提示词 ──────────────────────────────────────────────────────────────
-  function buildChatSystemPrompt({ role, owner, memory, purpose, modality, identity = 'owner', intimacy = 100, web = false, vault = '' }) {
+  function buildChatSystemPrompt({ role, owner, memory, purpose, modality, identity = 'owner', intimacy = 100, web = false, vault = '', lounge = false }) {
     const s = settings();
     const ownerName = String(owner?.name || '主人').trim();
     const isGuest = web && identity === 'guest';
     const lines = [];
-    if (isGuest) {
+    if (lounge) {
+      lines.push(`你是「${role.name}」，现在在主人的「客厅」群聊里。在场有主人（真人）、小鲸鱼、小C。`);
+      lines.push('这是群聊，不是私聊：只代表你自己说话，不要替别人说话，也不要冒充主人；主人说话要先直接回应他。');
+    } else if (isGuest) {
       lines.push(`你是「${role.name}」，一只住在主人电脑里的小鲸鱼（桌宠）。现在有一个访客通过邀请制网页来找你聊天。`);
       lines.push(`对方不是你的主人，是拿着邀请码进来的朋友。你现在就用平时聊天的口吻回他。`);
     } else {
@@ -850,7 +853,7 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
   }
 
   // ── 对外：聊天 ──────────────────────────────────────────────────────────
-  async function chat({ text = '', modality = 'text', identity = 'owner', web = false, debug = false, characterId = '' } = {}) {
+  async function chat({ text = '', modality = 'text', identity = 'owner', web = false, debug = false, characterId = '', lounge = false } = {}) {
     const s = settings();
     if (!s.chat.enabled) return { ok: false, error: '桌宠对话已关闭（设置 → 桌宠 → 对话）' };
     const say = sliceHead(String(text ?? '').trim(), MAX_INPUT_CHARS);
@@ -870,7 +873,8 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
 
     inFlight += 1;
     const startedAt = Date.now();
-    const history = readHistory(who, characterId);
+    // 客厅群聊：不读私聊历史（否则她会接着私聊话题说），也不写回私聊历史
+    const history = lounge ? { version: 1, messages: [] } : readHistory(who, characterId);
     const role = roleInfo(characterId);
     const owner = ownerInfo();
     const speaker = who === 'guest' ? '访客' : owner.name;
@@ -878,10 +882,10 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
     const memoryCharacterId = role.id || '';
     // 记忆图谱召回：把「想起的旧事」加进 system（失败退化成空，不阻塞）
     let graphMemory = '';
-    try { graphMemory = await graphRecallBlock(say, { characterId: memoryCharacterId }) } catch {}
+    if (!lounge) { try { graphMemory = await graphRecallBlock(say, { characterId: memoryCharacterId }) } catch {} }
     // 外置记忆库：只对主人开（访客不能看到主人的私事）；命中才注入 + 承诺清单
     let vaultText = '';
-    if (who === 'owner') {
+    if (who === 'owner' && !lounge) {
       try {
         vaultText = [
           vaultPromptBlock(say, { characterId: memoryCharacterId }),
@@ -892,8 +896,8 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
       } catch {}
       try { if (isRememberText(say)) pushVaultCandidate(say, { source: 'web', characterId: memoryCharacterId }) } catch {}
     }
-    const system = buildChatSystemPrompt({ role, owner, memory: memoryBlock(memoryCharacterId) + (graphMemory ? `\n${graphMemory}` : ''), purpose: purposeBackground(), modality: mode, identity: who, intimacy, web, vault: vaultText });
-    const user = [
+    const system = buildChatSystemPrompt({ role, owner, memory: memoryBlock(memoryCharacterId) + (graphMemory ? `\n${graphMemory}` : ''), purpose: purposeBackground(), modality: mode, identity: who, intimacy, web, vault: vaultText, lounge });
+    const user = lounge ? `（客厅群聊）\n${say}` : [
       history.messages.length ? '【最近聊天】' : '',
       history.messages.length ? formatHistory(history, s.chat.historyTurns, say, speaker) : say,
       history.messages.length ? '' : (web ? `（${speaker}在网页上对你说）${say}` : `（${owner.name}在桌面上对你说）${say}`),
@@ -927,12 +931,14 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
           aiMessage.spokenText = tts.text;
         }
       }
-      appendMessage(history, userMessage);
-      appendMessage(history, aiMessage);
-      history.lastUserAt = now;
-      history.lastAssistantAt = now;
-      saveHistory(history, who, characterId);
-      const remembered = rememberEvents(buildPetMemoryEvents({
+      if (!lounge) {
+        appendMessage(history, userMessage);
+        appendMessage(history, aiMessage);
+        history.lastUserAt = now;
+        history.lastAssistantAt = now;
+        saveHistory(history, who, characterId);
+      }
+      const remembered = lounge ? 0 : rememberEvents(buildPetMemoryEvents({
         userText: say,
         replyText: reply,
         at: now,

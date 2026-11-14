@@ -30,14 +30,14 @@ function readHost() {
   } catch { return null }
 }
 
-async function petChat(text, identity = 'guest', characterId = '') {
+async function petChat(text, identity = 'guest', characterId = '', opts = {}) {
   const h = readHost()
   if (!h || !h.token) return { ok: false, error: '她还没准备好（本机服务未就绪）' }
   try {
     const r = await fetch(`${h.baseUrl}${h.api}/chat`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-pet-token': h.token },
-      body: JSON.stringify({ text, identity, web: true, debug: identity === 'owner', characterId }),
+      body: JSON.stringify({ text, identity, web: true, debug: identity === 'owner', characterId, lounge: opts.lounge === true }),
     })
     return await r.json()
   } catch (e) { return { ok: false, error: String(e.message) } }
@@ -96,7 +96,7 @@ const LOUNGE_CHARS = [
   { id: 'char-mw5ku2rk', name: '小鲸鱼' },
   { id: 'claude', name: '小C' },
 ]
-const LOUNGE_QUOTA = 15
+const LOUNGE_QUOTA = 40
 let loungeMsgs = []
 let loungeDaily = {}
 let loungeTurn = 0
@@ -128,15 +128,45 @@ function loungeBump(id) {
   loungeDaily[k][id] = (Number(loungeDaily[k][id] || 0)) + 1
 }
 
-async function loungeSpeak(id, name, ctx) {
-  const prompt = `【客厅】你是「${name}」，这是主人开的客厅，你和其它 AI、主人都在这里聊。最近的对话：\n${ctx || '（还没有人说话）'}\n\n轮到你决定：现在想说话吗？想说就直接说你要说的话（自然、简短，1~3 句，别演、别客套）；如果没什么可说的、或不该你接，就只回复 [沉默]。`
-  const r = await petChat(prompt, 'owner', id)
+// 客厅里「谁是谁」：给每个角色一句明确的关系说明，避免把彼此/主人认错。
+const LOUNGE_RELATIONS = {
+  'char-mw5ku2rk': '你是小鲸鱼，主人的女儿，叫主人「爸爸」；小C 是姐姐（大小姐）。',
+  claude: '你是小C，这个家的姐姐（大小姐）；主人是主人本人；小鲸鱼是妹妹（女儿），会叫主人「爸爸」。',
+}
+
+async function loungeSpeak(id, name, ctx, { ownerJustSpoke = false, ownerText = '', force = false } = {}) {
+  const others = LOUNGE_CHARS.filter((c) => c.id !== id).map((c) => c.name).join('、')
+  const relation = LOUNGE_RELATIONS[id] || `你是「${name}」。`
+  const instruction = ownerJustSpoke
+    ? `主人刚刚说：「${String(ownerText).slice(0, 120)}」\n规则：你的第一句必须直接接住主人的这句话（他在跟你们说话；不要答非所问，不要只跟别人聊，也不要用旁白代替回答）。${force ? '主人已经等着了，必须回一句，不能沉默。' : '回 1~2 句，可以再带一句别人的话。'}`
+    : '轮到你：想接就自然说 1~3 句；不想接只回复 [沉默]。'
+  const prompt = [
+    '【客厅 · 群聊，不是私聊】',
+    `在场的人：主人（真人）、${LOUNGE_CHARS.map((c) => c.name).join('、')}。${relation}`,
+    `你只代表你自己；不要替${others}或主人说话，也不要冒充他们；不要照搬私聊里的语境（如果看到私聊记录，那是另一个场景）。`,
+    '',
+    '最近的对话：',
+    ctx || '（还没有人说话）',
+    '',
+    instruction,
+  ].join('\n')
+  const r = await petChat(prompt, 'owner', id, { lounge: true })
   const text = String(r?.reply?.text || '').trim()
   if (!text || text === '[沉默]' || text.includes('[沉默]')) return null
   return text.slice(0, 500)
 }
-function loungeCtx(n = 10) {
-  return loungeMsgs.slice(-n).map((m) => `${m.name}：${m.text}`).join('\n')
+function dayKeyOf(at) {
+  const d = new Date(at)
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
+}
+function loungeCtx(n = 20) {
+  const today = dayKeyOf(Date.now())
+  const older = loungeMsgs.filter((m) => dayKeyOf(m.at) !== today).slice(-8)
+  const head = older.length
+    ? `更早（昨天及以前；你们各自的记忆里也有）：\n${older.map((m) => `${m.name}：${String(m.text).slice(0, 50)}`).join('\n')}\n`
+    : ''
+  const recent = loungeMsgs.slice(-n).map((m) => `${dayKeyOf(m.at) === today ? '' : '[昨天] '}${m.name}：${m.text}`).join('\n')
+  return head + recent
 }
 function loungePush(sender, name, text, fromOwner = false) {
   const msg = { id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, sender, name, text, at: Date.now(), fromOwner }
@@ -150,26 +180,35 @@ async function loungeTick() {
   loungeBusy = true
   try {
     const last = loungeMsgs[loungeMsgs.length - 1]
-    let spoke = false
-    for (let i = 0; i < LOUNGE_CHARS.length && !spoke; i++) {
+    // 主人刚说话：这次不算「自动聊天额度」，而且让两个人都能应一句（他说话不能没人搭）。
+    const ownerJustSpoke = Boolean(last && (last.fromOwner === true || last.sender === 'owner'))
+    const maxSpeakers = ownerJustSpoke ? LOUNGE_CHARS.length : 1
+    let spokes = 0
+    for (let i = 0; i < LOUNGE_CHARS.length && spokes < maxSpeakers; i++) {
       const idx = (loungeTurn + i) % LOUNGE_CHARS.length
       const ch = LOUNGE_CHARS[idx]
       loungeTurn = (idx + 1) % LOUNGE_CHARS.length
-      if (loungeLeft(ch.id) <= 0) continue
+      if (!ownerJustSpoke && loungeLeft(ch.id) <= 0) continue
       if (last && last.sender === ch.id) continue
-      const text = await loungeSpeak(ch.id, ch.name, loungeCtx())
+      const text = await loungeSpeak(ch.id, ch.name, loungeCtx(ownerJustSpoke ? 8 : 20), { ownerJustSpoke, ownerText: ownerJustSpoke ? String(last?.text || '') : '' })
       if (text) {
         loungePush(ch.id, ch.name, text)
-        loungeBump(ch.id)
-        spoke = true
+        if (!ownerJustSpoke) loungeBump(ch.id)
+        spokes += 1
       }
+    }
+    if (ownerJustSpoke && spokes === 0) {
+      // 兜底：主人都开口了，不能没人应。
+      const fb = LOUNGE_CHARS[loungeTurn % LOUNGE_CHARS.length]
+      const text = await loungeSpeak(fb.id, fb.name, loungeCtx(6), { ownerJustSpoke: true, ownerText: String(last?.text || ''), force: true })
+      if (text) loungePush(fb.id, fb.name, text)
     }
   } finally {
     loungeBusy = false
   }
 }
 setTimeout(() => { void loungeTick() }, 3000)
-setInterval(() => { void loungeTick() }, 60000)
+setInterval(() => { void loungeTick() }, 300000)
 
 // 表情包：读 nekowhale 目录 + 代理 GIF
 const STICKER_CATALOG = String(cfg.stickerCatalog || path.join(HOME, '.dsh', 'profiles', 'web', 'node_modules', 'dsh-nekowhale-stickers', 'meta', 'nekowhale.json'))
