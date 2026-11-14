@@ -9874,7 +9874,9 @@ async function main() {
         }
         // ── 记忆卡容量告警：只私聊管理员本人，不发群、不接受任意收件人 ──────────
         if (req.method === 'POST' && url.pathname === '/api/memory-card/notify') {
-          const body = JSON.parse(await readBody() || '{}');
+          // readBody() 已经解析成对象了；再 JSON.parse 会抛 `"[object Object]" is not valid JSON`
+          // （2026-11-14 修：这条告警此前从未送达，plugin.log 里连续 86 次失败）。
+          const body = await readBody();
           if (!cfg.ownerQQ) { sendJson({ ok: false, error: '未配置管理员 QQ（ownerQQ）' }, 400); return; }
           const level = Math.max(1, Math.min(3, Number(body.level) || 1));
           const now = Date.now();
