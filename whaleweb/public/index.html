@@ -145,11 +145,16 @@
     border-bottom: 1px solid var(--divider); background: var(--canvas); flex-shrink: 0;
   }
   .avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: var(--accent-tint); border: 1px solid var(--border); transition: transform .2s ease; }
+  .head-avatars { display: flex; align-items: center; }
+  .head-avatars .avatar.second { margin-left: -12px; }
   .avatar.thinking { animation: breathe 1.4s ease-in-out infinite; }
   @keyframes breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.09); } }
   header h1 { font-size: 19px; }
   .status { font-size: 12px; color: var(--ink-3); display: flex; align-items: center; gap: 6px; }
   .head-actions { margin-left: auto; display: flex; gap: 8px; }
+  .room-tabs { display: flex; gap: 2px; background: var(--hover); padding: 3px; border-radius: 10px; border: 1px solid var(--border); }
+  .room-tab { border: none; background: transparent; padding: 5px 12px; border-radius: 7px; font-size: 13px; cursor: pointer; color: var(--ink-2); }
+  .room-tab.active { background: var(--canvas); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
   .icon-btn {
     width: 36px; height: 36px; flex-shrink: 0; border: 1px solid var(--border); background: transparent;
     border-radius: 10px; font-size: 16px; cursor: pointer; color: var(--ink-2);
@@ -219,6 +224,11 @@
     background: var(--code-bg); border: 1px solid var(--divider); border-radius: 8px; padding: 8px 10px;
   }
   .dev-empty { color: var(--ink-3); font-size: 12.5px; padding: 12px 16px; }
+  .screen-ctl { padding: 10px 16px; border-bottom: 1px solid var(--divider); font-size: 12px; color: var(--ink-2); }
+  .screen-ctl h4 { color: var(--accent); margin: 0 0 6px; font-size: 12px; font-weight: 600; }
+  .screen-ctl-row { margin: 6px 0; display: flex; align-items: center; gap: 8px; }
+  .screen-ctl-row input[type="range"] { flex: 1; accent-color: var(--accent); }
+  .screen-ctl-row b { color: var(--ink); }
 
   @media (max-width: 1000px) {
     .app, .app.dev { grid-template-columns: 1fr; }
@@ -266,10 +276,18 @@
     <!-- 中间：聊天 -->
     <section class="center">
       <header>
-        <img class="avatar" id="head-avatar" src="/avatar.png" alt="🐋">
+        <div class="head-avatars" id="head-avatars">
+          <img class="avatar" id="head-avatar" src="/avatar.png" alt="🐋">
+          <img class="avatar second" id="head-avatar2" src="/claude.png?v=3" alt="🍂" style="display:none">
+        </div>
         <div>
           <h1>小鲸鱼</h1>
           <div class="status"><span class="dot" id="dot"></span><span id="status-text">……</span></div>
+        </div>
+        <div class="room-tabs" id="room-tabs">
+          <button class="room-tab active" data-room="whale">🐋 鲸鱼</button>
+          <button class="room-tab" data-room="claude">🍂 小C</button>
+          <button class="room-tab" data-room="lounge">🛋 客厅</button>
         </div>
         <div class="head-actions">
           <button id="theme-btn" class="icon-btn" title="深浅色">🌙</button>
@@ -292,6 +310,14 @@
     <!-- 右栏：思考后台 -->
     <aside id="right" class="panel right hidden">
       <div class="panel-head"><span>🧠 思考后台</span><button id="dev-close" class="icon-btn" style="width:26px;height:26px;font-size:14px">×</button></div>
+      <div class="screen-ctl" id="screen-ctl">
+        <h4>👁 陪看（屏幕感知）</h4>
+        <div class="screen-ctl-row"><label><input type="checkbox" id="sc-enabled"> 开启</label><span style="color:var(--ink-2)">看思考后台时自动暂停</span></div>
+        <div class="screen-ctl-row">频率 <input type="range" id="sc-interval" min="5" max="120" step="5" value="30"> <span id="sc-interval-v">30s</span></div>
+        <div class="screen-ctl-row">冷却 <input type="range" id="sc-cooldown" min="1" max="30" value="5"> <span id="sc-cooldown-v">5min</span></div>
+        <div class="screen-ctl-row"><img id="sc-image" src="/api/screen/last-image" alt="上一张截图" style="display:none;max-width:100%;border-radius:8px;border:1px solid var(--divider)"></div>
+        <div class="screen-ctl-row">看到：<b id="sc-note">—</b></div>
+      </div>
       <div id="dev-body" class="dev-body"><div class="dev-empty">说一句话后，这里会显示她的思考过程。</div></div>
     </aside>
   </div>
@@ -319,12 +345,16 @@
   let devMode = false
   let identity = 'guest'
 
+  function herAvatar() {
+    return currentRoom === 'claude' ? '/claude.png?v=3' : '/avatar.png'
+  }
+
   function bubbleNode(role, text) {
     const row = document.createElement('div')
     row.className = 'row ' + role
     if (role === 'her') {
       const av = document.createElement('img')
-      av.className = 'avatar'; av.src = '/avatar.png'; av.alt = '🐋'
+      av.className = 'avatar'; av.src = herAvatar(); av.alt = '🐋'
       row.appendChild(av)
     }
     const b = document.createElement('div')
@@ -345,7 +375,7 @@
     const row = document.createElement('div')
     row.className = 'row her'
     const av = document.createElement('img')
-    av.className = 'avatar'; av.src = '/avatar.png'; av.alt = '🐋'
+    av.className = 'avatar'; av.src = herAvatar(); av.alt = '🐋'
     row.appendChild(av)
     const b = document.createElement('div')
     b.className = 'bubble'
@@ -383,7 +413,7 @@
       const row = document.createElement('div')
       row.className = 'row her'
       const av = document.createElement('img')
-      av.className = 'avatar thinking'; av.src = '/avatar.png'; av.alt = '🐋'
+      av.className = 'avatar thinking'; av.src = herAvatar(); av.alt = '🐋'
       row.appendChild(av)
       const t = document.createElement('div')
       t.className = 'typing'; t.innerHTML = '<span class="dots">她正在想</span>'
@@ -399,7 +429,7 @@
     const row = document.createElement('div')
     row.className = 'row her'
     const av = document.createElement('img')
-    av.className = 'avatar'; av.src = '/avatar.png'; av.alt = '🐋'
+    av.className = 'avatar'; av.src = herAvatar(); av.alt = '🐋'
     row.appendChild(av)
     const b = document.createElement('div')
     b.className = 'bubble'
@@ -417,15 +447,16 @@
 
   async function loadHistory() {
     try {
-      const r = await fetch('/api/history?limit=60').then(r => r.json())
+      const characterId = currentRoom === 'claude' ? 'claude' : (currentRoom === 'whale' ? 'char-mw5ku2rk' : '')
+      const r = await fetch('/api/history?limit=60&characterId=' + encodeURIComponent(characterId)).then(r => r.json())
       const list = Array.isArray(r && r.messages) ? r.messages : []
       if (list.length) {
         for (const m of list) addBubble(m.role === 'assistant' ? 'her' : 'me', m.text)
       } else {
-        addBubble('her', '你来了呀～我是小鲸鱼。🐋 今天过得怎么样？')
+        addBubble('her', currentRoom === 'claude' ? '你来了。有什么想问我的？' : '你来了呀～我是小鲸鱼。🐋 今天过得怎么样？')
       }
     } catch {
-      addBubble('her', '你来了呀～我是小鲸鱼。🐋 今天过得怎么样？')
+      addBubble('her', currentRoom === 'claude' ? '你来了。有什么想问我的？' : '你来了呀～我是小鲸鱼。🐋 今天过得怎么样？')
     }
   }
 
@@ -438,11 +469,39 @@
       $('l2d-btn').classList.remove('hidden')
       $('right').classList.remove('hidden')
       $('resizer-right').classList.remove('hidden')
+      loadScreen()
+      setDevPage(devPanelOpen())   // 开发者页一打开就告诉屏幕感知：别拍
     }
     loadHistory()
     pollStatus()
     loadActivity()
   }
+
+  // —— 屏幕感知控制 ——
+  async function loadScreen() {
+    try {
+      const r = await fetch('/api/screen').then(r => r.json())
+      if (r && r.enabled !== undefined) {
+        $('sc-enabled').checked = r.enabled
+        $('sc-interval').value = Math.round((r.intervalMs || 30000) / 1000)
+        $('sc-interval-v').textContent = Math.round((r.intervalMs || 30000) / 1000) + 's'
+        $('sc-cooldown').value = Math.round((r.cooldownMs || 300000) / 60000)
+        $('sc-cooldown-v').textContent = Math.round((r.cooldownMs || 300000) / 60000) + 'min'
+        $('sc-note').textContent = r.note || '—'
+        const img = $('sc-image')
+        if (r.note) { img.style.display = 'block'; img.src = '/api/screen/last-image?t=' + Date.now() } else { img.style.display = 'none' }
+      }
+    } catch {}
+  }
+  async function saveScreen(patch) {
+    try { await fetch('/api/screen', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch) }) } catch {}
+  }
+  $('sc-enabled').onchange = (e) => saveScreen({ enabled: e.target.checked })
+  $('sc-interval').oninput = (e) => { $('sc-interval-v').textContent = e.target.value + 's' }
+  $('sc-interval').onchange = (e) => saveScreen({ intervalMs: Number(e.target.value) * 1000 })
+  $('sc-cooldown').oninput = (e) => { $('sc-cooldown-v').textContent = e.target.value + 'min' }
+  $('sc-cooldown').onchange = (e) => saveScreen({ cooldownMs: Number(e.target.value) * 60000 })
+  setInterval(loadScreen, 10000)
 
   async function pollStatus() {
     try {
@@ -597,10 +656,11 @@
   }
 
   async function deliver(text) {
+    if (currentRoom === 'lounge') { await loungeSay(text); return }
     setThinking(true)
     $('send').disabled = true
     try {
-      const r = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) }).then(r => r.json())
+      const r = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, characterId: ROOM_CHARS[currentRoom] }) }).then(r => r.json())
       setThinking(false)
       if (r && r.ok && r.reply) {
         addHerBubble(r.reply)
@@ -615,6 +675,75 @@
       $('send').disabled = false
     }
   }
+
+  // —— 房间：鲸鱼 / Claude / 客厅 ——
+  const ROOM_CHARS = { whale: 'char-mw5ku2rk', claude: 'claude', lounge: '' }
+  let currentRoom = 'whale'
+  let loungeTimer = null
+  let loungeCount = 0
+
+  function setAvatar(room) {
+    const av1 = $('head-avatar')
+    const av2 = $('head-avatar2')
+    if (!av1) return
+    if (room === 'lounge') {
+      av1.src = '/avatar.png'
+      if (av2) av2.style.display = 'block'
+    } else if (room === 'claude') {
+      av1.src = '/claude.png?v=3'
+      if (av2) av2.style.display = 'none'
+    } else {
+      av1.src = '/avatar.png'
+      if (av2) av2.style.display = 'none'
+    }
+  }
+
+  function switchRoom(room) {
+    currentRoom = room
+    document.querySelectorAll('.room-tab').forEach((b) => b.classList.toggle('active', b.dataset.room === room))
+    const isLounge = room === 'lounge'
+    setAvatar(room)
+    const titleEl = document.querySelector('header h1')
+    if (titleEl) titleEl.textContent = room === 'whale' ? '小鲸鱼' : (room === 'claude' ? '小C' : '客厅')
+    $('thread').innerHTML = ''
+    $('input').placeholder = isLounge ? '在客厅说句话…' : '说点什么…'
+    if (isLounge) startLounge()
+    else { stopLounge(); loadHistory() }
+  }
+
+  function stopLounge() {
+    if (loungeTimer) { clearInterval(loungeTimer); loungeTimer = null }
+    loungeCount = 0
+  }
+  async function startLounge() {
+    stopLounge()
+    await pollLounge()
+    loungeTimer = setInterval(pollLounge, 3000)
+  }
+  async function pollLounge() {
+    try {
+      const r = await fetch('/api/lounge/messages').then((x) => x.json())
+      const list = Array.isArray(r && r.messages) ? r.messages : []
+      if (list.length !== loungeCount || loungeCount === 0) {
+        loungeCount = list.length
+        $('thread').innerHTML = ''
+        for (const m of list) {
+          if (m.sender === 'owner') addBubble('me', m.text)
+          else addBubble('her', (m.name && m.name !== '小鲸鱼' ? '【' + m.name + '】' : '') + m.text)
+        }
+        scroller.scrollTop = scroller.scrollHeight
+      }
+      const quota = (r && Array.isArray(r.quota)) ? r.quota.map((q) => q.name + ' ' + q.left + '/' + q.quota).join(' · ') : ''
+      if (quota) $('status-text').textContent = quota
+    } catch {}
+  }
+  async function loungeSay(text) {
+    try {
+      await fetch('/api/lounge/say', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) })
+      setTimeout(pollLounge, 600)
+    } catch {}
+  }
+  document.querySelectorAll('.room-tab').forEach((b) => { b.onclick = () => switchRoom(b.dataset.room) })
 
   // —— 表情包 ——
   let stickers = []
@@ -702,9 +831,38 @@
   }
 
   $('theme-btn').onclick = toggleTheme
-  $('dev-btn').onclick = () => $('right').classList.toggle('hidden')
   $('l2d-btn').onclick = () => window.open('/l2d/', '_blank')
-  $('dev-close').onclick = () => $('right').classList.add('hidden')
+
+  // —— 开发者页对「陪看」隐身：她们不许监视开发者页 ——
+  // 思考后台打开时每 5 秒上报一次心跳；屏幕感知侧 15 秒收不到心跳就当已关闭。
+  let devPageTimer = null
+  // 「开发者真的在看」才算：标签页可见 + 窗口有焦点。切走/最小化就恢复陪看。
+  function devPageVisibleNow() { return document.visibilityState === 'visible' && document.hasFocus() }
+  function reportDevPage(open) {
+    try {
+      fetch('/api/devpage', {
+        method: 'POST',
+        keepalive: true,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ open: !!open, visible: devPageVisibleNow() }),
+      }).catch(() => {})
+    } catch {}
+  }
+  function devPanelOpen() { return !$('right').classList.contains('hidden') }
+  function setDevPage(open) {
+    if (devPageTimer) { clearInterval(devPageTimer); devPageTimer = null }
+    reportDevPage(open)
+    if (open) devPageTimer = setInterval(() => reportDevPage(true), 5000)
+  }
+  $('dev-btn').onclick = () => {
+    $('right').classList.toggle('hidden')
+    setDevPage(devPanelOpen())
+  }
+  $('dev-close').onclick = () => { $('right').classList.add('hidden'); setDevPage(false) }
+  document.addEventListener('visibilitychange', () => { if (devMode) reportDevPage(devPanelOpen()) })
+  window.addEventListener('focus', () => { if (devMode) reportDevPage(devPanelOpen()) })
+  window.addEventListener('blur', () => { if (devMode) reportDevPage(devPanelOpen()) })
+  window.addEventListener('pagehide', () => { if (devMode) reportDevPage(false) })
 
   // —— 两侧侧屏拖拽调宽（记忆到 localStorage）——
   function initResizer(handle, side) {

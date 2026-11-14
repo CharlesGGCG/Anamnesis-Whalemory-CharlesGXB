@@ -29,14 +29,14 @@ function readHost() {
   } catch { return null }
 }
 
-async function petChat(text, identity = 'guest') {
+async function petChat(text, identity = 'guest', characterId = '') {
   const h = readHost()
   if (!h || !h.token) return { ok: false, error: '她还没准备好（本机服务未就绪）' }
   try {
     const r = await fetch(`${h.baseUrl}${h.api}/chat`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-pet-token': h.token },
-      body: JSON.stringify({ text, identity, web: true, debug: identity === 'owner' }),
+      body: JSON.stringify({ text, identity, web: true, debug: identity === 'owner', characterId }),
     })
     return await r.json()
   } catch (e) { return { ok: false, error: String(e.message) } }
@@ -51,14 +51,124 @@ async function petStatus() {
   } catch { return { ok: false, online: false } }
 }
 
-async function petHistory(limit = 60, identity = 'guest') {
+async function petHistory(limit = 60, identity = 'guest', characterId = '') {
   const h = readHost()
   if (!h || !h.token) return { ok: false, messages: [] }
   try {
-    const r = await fetch(`${h.baseUrl}${h.api}/history?limit=${limit}&identity=${identity}`, { headers: { 'x-pet-token': h.token } })
+    const r = await fetch(`${h.baseUrl}${h.api}/history?limit=${limit}&identity=${identity}&characterId=${encodeURIComponent(characterId)}`, { headers: { 'x-pet-token': h.token } })
     return await r.json()
   } catch { return { ok: false, messages: [] } }
 }
+
+async function petScreenStatus() {
+  const h = readHost()
+  if (!h || !h.token) return { ok: false, enabled: false }
+  try {
+    const r = await fetch(`${h.baseUrl}${h.api}/screen`, { headers: { 'x-pet-token': h.token } })
+    return await r.json()
+  } catch { return { ok: false, enabled: false } }
+}
+
+async function petScreenConfig(patch) {
+  const h = readHost()
+  if (!h || !h.token) return { ok: false }
+  try {
+    const r = await fetch(`${h.baseUrl}${h.api}/screen`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-pet-token': h.token },
+      body: JSON.stringify(patch || {}),
+    })
+    return await r.json()
+  } catch { return { ok: false } }
+}
+
+// ── 房间：去鲸鱼房间 / 小C 房间（单聊），或客厅（群聊）────────────────
+const ROOMS = [
+  { id: 'whale', name: '鲸鱼的房间', type: 'private', characterId: 'char-mw5ku2rk' },
+  { id: 'claude', name: '小C 的房间', type: 'private', characterId: 'claude' },
+  { id: 'lounge', name: '客厅', type: 'group', characterId: '' },
+]
+
+// 客厅（群聊）状态：消息流 + round-robin 调度 + 每天额度
+const LOUNGE_FILE = path.join(__dirname, 'lounge.json')
+const LOUNGE_CHARS = [
+  { id: 'char-mw5ku2rk', name: '小鲸鱼' },
+  { id: 'claude', name: '小C' },
+]
+const LOUNGE_QUOTA = 15
+let loungeMsgs = []
+let loungeDaily = {}
+let loungeTurn = 0
+let loungeBusy = false
+
+function loadLounge() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(LOUNGE_FILE, 'utf8'))
+    loungeMsgs = Array.isArray(raw?.messages) ? raw.messages : []
+    loungeDaily = raw?.daily && typeof raw.daily === 'object' ? raw.daily : {}
+  } catch {}
+}
+function saveLounge() {
+  try { fs.writeFileSync(LOUNGE_FILE, JSON.stringify({ messages: loungeMsgs, daily: loungeDaily }, null, 2)) } catch {}
+}
+loadLounge()
+
+function loungeDayKey() {
+  const d = new Date()
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
+}
+function loungeLeft(id) {
+  const d = loungeDaily[loungeDayKey()] || {}
+  return Math.max(0, LOUNGE_QUOTA - Number(d[id] || 0))
+}
+function loungeBump(id) {
+  const k = loungeDayKey()
+  loungeDaily[k] = loungeDaily[k] || {}
+  loungeDaily[k][id] = (Number(loungeDaily[k][id] || 0)) + 1
+}
+
+async function loungeSpeak(id, name, ctx) {
+  const prompt = `【客厅】你是「${name}」，这是主人开的客厅，你和其它 AI、主人都在这里聊。最近的对话：\n${ctx || '（还没有人说话）'}\n\n轮到你决定：现在想说话吗？想说就直接说你要说的话（自然、简短，1~3 句，别演、别客套）；如果没什么可说的、或不该你接，就只回复 [沉默]。`
+  const r = await petChat(prompt, 'owner', id)
+  const text = String(r?.reply?.text || '').trim()
+  if (!text || text === '[沉默]' || text.includes('[沉默]')) return null
+  return text.slice(0, 500)
+}
+function loungeCtx(n = 10) {
+  return loungeMsgs.slice(-n).map((m) => `${m.name}：${m.text}`).join('\n')
+}
+function loungePush(sender, name, text, fromOwner = false) {
+  const msg = { id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, sender, name, text, at: Date.now(), fromOwner }
+  loungeMsgs.push(msg)
+  if (loungeMsgs.length > 300) loungeMsgs = loungeMsgs.slice(-300)
+  saveLounge()
+  return msg
+}
+async function loungeTick() {
+  if (loungeBusy) return
+  loungeBusy = true
+  try {
+    const last = loungeMsgs[loungeMsgs.length - 1]
+    let spoke = false
+    for (let i = 0; i < LOUNGE_CHARS.length && !spoke; i++) {
+      const idx = (loungeTurn + i) % LOUNGE_CHARS.length
+      const ch = LOUNGE_CHARS[idx]
+      loungeTurn = (idx + 1) % LOUNGE_CHARS.length
+      if (loungeLeft(ch.id) <= 0) continue
+      if (last && last.sender === ch.id) continue
+      const text = await loungeSpeak(ch.id, ch.name, loungeCtx())
+      if (text) {
+        loungePush(ch.id, ch.name, text)
+        loungeBump(ch.id)
+        spoke = true
+      }
+    }
+  } finally {
+    loungeBusy = false
+  }
+}
+setTimeout(() => { void loungeTick() }, 3000)
+setInterval(() => { void loungeTick() }, 60000)
 
 // 表情包：读 nekowhale 目录 + 代理 GIF
 const STICKER_CATALOG = String(cfg.stickerCatalog || path.join(HOME, '.dsh', 'profiles', 'web', 'node_modules', 'dsh-nekowhale-stickers', 'meta', 'nekowhale.json'))
@@ -251,9 +361,14 @@ const server = http.createServer(async (req, res) => {
     let body = ''
     for await (const chunk of req) body += chunk
     let text = ''
-    try { text = String(JSON.parse(body).text || '') } catch {}
+    let characterId = ''
+    try {
+      const j = JSON.parse(body)
+      text = String(j.text || '')
+      characterId = String(j.characterId || '').trim()
+    } catch {}
     if (!text.trim()) return send(res, 400, { ok: false, error: '空消息' })
-    const r = await petChat(text, id)
+    const r = await petChat(text, id, characterId)
     if (r.ok && r.reply) {
       const sticker = resolveStickerRef(r.reply.stickerRef)
       if (sticker) r.reply.sticker = sticker
@@ -265,6 +380,92 @@ const server = http.createServer(async (req, res) => {
     return send(res, r.ok ? 200 : 502, r)
   }
 
+  if (p === '/api/rooms') {
+    return send(res, 200, { ok: true, rooms: ROOMS })
+  }
+
+  if (p === '/api/lounge/messages') {
+    if (!authorized(req)) return send(res, 401, { ok: false, error: '请先输入邀请码' })
+    return send(res, 200, { ok: true, messages: loungeMsgs.slice(-100), quota: LOUNGE_CHARS.map((c) => ({ id: c.id, name: c.name, left: loungeLeft(c.id), quota: LOUNGE_QUOTA })) })
+  }
+
+  if (p === '/api/lounge/say' && req.method === 'POST') {
+    if (!authorized(req)) return send(res, 401, { ok: false, error: '请先输入邀请码' })
+    let body = ''
+    for await (const chunk of req) body += chunk
+    let text = ''
+    try { text = String(JSON.parse(body).text || '').trim() } catch {}
+    if (!text) return send(res, 400, { ok: false, error: '空消息' })
+    loungePush('owner', '主人', text.slice(0, 500), true)
+    send(res, 200, { ok: true })
+    void loungeTick()
+    return
+  }
+
+  // 开发者页状态：页面打开「思考后台」时每 5 秒上报一次心跳。
+  // 两条防线（2026-11-13 主人定：她们不许监视开发者页）：
+  //   ① 立刻把「陪看」关掉（老进程也认这个开关），页面收起/关闭再恢复原状；
+  //   ② 写 devpage.json，新版屏幕感知读到就整轮跳过截屏（连图都不给视觉模型）。
+  if (p === '/api/devpage' && req.method === 'POST') {
+    if (identityOf(req) !== 'owner') return send(res, 403, { ok: false, error: '只有开发者能上报开发者页状态' })
+    let body = ''
+    for await (const chunk of req) body += chunk
+    let open = false
+    let visible = false
+    try {
+      const j = JSON.parse(body || '{}')
+      open = j.open === true
+      visible = j.visible === true
+    } catch {}
+    const surfDir = path.dirname(path.dirname(HOST_FILE))   // .../surfcore（避开 SYSTEM 的 os.homedir()）
+    const file = path.join(surfDir, 'devpage.json')
+    let prev = null
+    try {
+      const j = JSON.parse(fs.readFileSync(file, 'utf8'))
+      if (j.prevEnabled === true || j.prevEnabled === false) prev = j.prevEnabled
+    } catch {}
+    const pause = open && visible
+    if (pause && prev === null) {
+      let st = {}
+      try { st = await petScreenStatus() } catch {}
+      prev = st?.enabled === true
+      if (prev) { try { await petScreenConfig({ enabled: false }) } catch {} }
+    } else if (!pause && prev !== null) {
+      if (prev) { try { await petScreenConfig({ enabled: true }) } catch {} }
+      prev = null
+    }
+    try {
+      const out = { open, visible, at: Date.now() }
+      if (prev !== null) out.prevEnabled = prev
+      fs.writeFileSync(file, JSON.stringify(out))
+    } catch {}
+    return send(res, 200, { ok: true, open, visible, paused: pause, prevEnabled: prev })
+  }
+
+  if (p === '/api/screen') {
+    if (identityOf(req) !== 'owner') return send(res, 403, { ok: false, error: '只有开发者能控制屏幕感知' })
+    if (req.method === 'POST') {
+      let body = ''
+      for await (const chunk of req) body += chunk
+      let patch = {}
+      try { patch = JSON.parse(body) } catch {}
+      return send(res, 200, await petScreenConfig(patch))
+    }
+    return send(res, 200, await petScreenStatus())
+  }
+
+  if (p === '/api/screen/last-image') {
+    if (identityOf(req) !== 'owner') return send(res, 403, { ok: false, error: '只有开发者能看截图' })
+    // hostFile 在 C:/Users/Administrator/.dsh/surfcore/pet/，上溯一层就是 surfcore 目录（避开 SYSTEM 的 os.homedir()）
+    const surfDir = path.dirname(path.dirname(HOST_FILE))
+    const f = path.join(surfDir, 'screen-last.jpg')
+    if (!fs.existsSync(f)) return send(res, 404, 'no image', 'text/plain')
+    const buf = fs.readFileSync(f)
+    res.writeHead(200, { 'content-type': 'image/jpeg', 'content-length': buf.length, 'cache-control': 'no-cache' })
+    res.end(buf)
+    return
+  }
+
   if (p === '/api/status') {
     if (!authorized(req)) return send(res, 401, { ok: false, error: '请先输入邀请码' })
     return send(res, 200, await petStatus())
@@ -274,7 +475,8 @@ const server = http.createServer(async (req, res) => {
     const id = identityOf(req)
     if (!id) return send(res, 401, { ok: false, error: '请先输入邀请码' })
     const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit')) || 60))
-    return send(res, 200, await petHistory(limit, id))
+    const characterId = String(url.searchParams.get('characterId') || '')
+    return send(res, 200, await petHistory(limit, id, characterId))
   }
 
   if (p === '/api/stickers') {
@@ -382,7 +584,8 @@ const server = http.createServer(async (req, res) => {
       if (fs.existsSync(file) && fs.statSync(file).isFile()) {
         const types = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.css': 'text/css', '.js': 'text/javascript' }
         const type = types[path.extname(file).toLowerCase()] || 'application/octet-stream'
-        res.writeHead(200, { 'content-type': type, 'cache-control': 'public, max-age=86400' })
+        const cache = /\.(png|jpe?g|webp|svg)$/i.test(rel) ? 'no-cache' : 'public, max-age=86400'
+        res.writeHead(200, { 'content-type': type, 'cache-control': cache })
         fs.createReadStream(file).pipe(res)
         return
       }
@@ -391,6 +594,19 @@ const server = http.createServer(async (req, res) => {
 
   return send(res, 404, 'not found', 'text/plain')
 })
+
+// 开发者页心跳超时（20 秒）就恢复陪看：页面崩了/被直接关掉，也不让陪看永久停摆。
+setInterval(async () => {
+  try {
+    const file = path.join(path.dirname(path.dirname(HOST_FILE)), 'devpage.json')
+    const j = JSON.parse(fs.readFileSync(file, 'utf8'))
+    const prev = j.prevEnabled
+    if ((prev === true || prev === false) && Date.now() - Number(j.at || 0) > 20000) {
+      if (prev) await petScreenConfig({ enabled: true })
+      fs.writeFileSync(file, JSON.stringify({ open: false, visible: false, at: Date.now() }))
+    }
+  } catch {}
+}, 10000).unref()
 
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`whaleweb listening on http://127.0.0.1:${PORT}`)
