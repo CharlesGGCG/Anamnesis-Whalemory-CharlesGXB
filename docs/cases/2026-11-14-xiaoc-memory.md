@@ -67,7 +67,17 @@ test-memory-card 27/27 通过
 验证：`collect --dry` 134 条素材生成正常；`getMemoryGraph('claude')` 建目录成功；
 test-memory-vault 11 组、test-memory-card 27/27。
 
-## 八、生效与残余
+## 九、日记自动化（2026-11-14 晚）
+
+- 共享逻辑抽到 `src/character-diary.js`（写/读/素材收集/LLM 生成），CLI 只做参数解析
+- 插件新增 `diary-scheduler.js`：**北京时间 22 点后**每 10 分钟检查一次，给每个角色补当天日记；
+  - 当天已有日记 → 跳过
+  - 当天素材 < 8 条 → 跳过（不硬写流水账）
+  - 生成失败只记日志，不重试（不烧 token）
+- 验证：`test-character-diary.mjs` 6 组断言（写/追加/列表/按角色隔离/空正文/无素材）；
+  `index.js` 动态 import 通过；CLI 能列出小C 的第一篇
+
+## 十、生效与残余
 
 - `pet-chat` / `memory-card` / `vault-inbox` 在插件进程里，**要 DSH 重启**才加载新逻辑
 - 桥接（QQ）仍用当前角色（小鲸鱼），无需改

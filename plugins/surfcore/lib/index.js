@@ -75,6 +75,7 @@ import { createPetChatService } from './pet-chat.js';
 import { createScreenObserver } from './screen-observer.js';
 import { createGraphOutboxDrain } from './graph-outbox.js';
 import { createVaultInboxDrain } from './vault-inbox.js';
+import { createDiaryScheduler } from './diary-scheduler.js';
 import { createPetPurposeService } from './pet-purpose.js';
 import { createPetApiService } from './pet-api.js';
 import { createUpdatesService, resumePendingApply } from './updates.js';
@@ -274,6 +275,9 @@ export function apply(ctx) {
   // 记忆库：把「答应/记住/生日」这类候选句抽词入库（外置、不占记忆卡容量）。
   const vaultInbox = createVaultInboxDrain({ pluginLog });
   vaultInbox.start();
+  // 日记：北京时间 22 点后，给每个角色补当天的日记（当天已有/素材太少就跳过）。
+  const diaryScheduler = createDiaryScheduler({ pluginLog });
+  diaryScheduler.start();
   const petPurpose = createPetPurposeService({ chat: petChat, tokenBudget, pluginLog, callBridge });
   const petApi = createPetApiService({
     chat: petChat,
