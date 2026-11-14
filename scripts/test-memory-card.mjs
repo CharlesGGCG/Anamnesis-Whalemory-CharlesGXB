@@ -366,8 +366,9 @@ function addOwnerRecord(card, offsetDays, text) {
   }, CFG, NOW).record;
 }
 
-test('最初：仅主人互动，前10/中10/后10/30天后概率递减', () => {
+test('最初：初次相遇 + 重要性最高的前 N 条（2026-11-14 起不再按天数随机锁）', () => {
   assert.equal(INITIAL_WINDOW_DAYS, 30);
+  // 旧曲线保留为参考值（不再参与 initial 标记，见 refreshInitialState 注释）
   assert.equal(initialProbabilityForOffset(0), 0.9);
   assert.equal(initialProbabilityForOffset(9), 0.9);
   assert.equal(initialProbabilityForOffset(10), 0.55);
@@ -388,19 +389,22 @@ test('最初：仅主人互动，前10/中10/后10/30天后概率递减', () => 
     score: 5, scope: 'bili', platform: 'bili', createdAt: NOW - 2 * DAY_MS, lastSeenAt: NOW - 2 * DAY_MS,
   }, CFG, NOW).record;
   card.meta.firstOwnerAt = day0.createdAt;
+  // 只留 3 条：初次相遇之外，按 importance 取前 3
+  card.meta.initialKeep = 3;
   refreshInitialState(card);
 
   assert.equal(day0.firstMet, true, '最早的主人互动自动成为初次相遇');
   assert.equal(day0.initialTier, 'first-meet');
   assert.equal(day0.initialProbability, 1);
-  assert.equal(day5.initialTier, 'first10');
-  assert.equal(day5.initialProbability, 0.9);
-  assert.equal(day15.initialTier, 'mid10');
-  assert.equal(day15.initialProbability, 0.55);
-  assert.equal(day25.initialTier, 'late10');
-  assert.equal(day25.initialProbability, 0.3);
-  assert.equal(day40.initialTier, 'after');
-  assert.equal(day40.initialProbability, 0.03);
+  assert.equal(day0.isInitial, true);
+  const others = [day5, day15, day25, day40];
+  assert.equal(others.filter((r) => r.isInitial).length, 3, '除初次相遇外只保留 initialKeep 条');
+  for (const record of others) {
+    if (!record.isInitial) continue;
+    assert.equal(record.initialTier, 'kept');
+    assert.equal(record.initialProbability, 1);
+    assert.ok(record.tags.includes('initial'));
+  }
   // 非主人互动永远不参与「最初」
   assert.equal(bili.isInitial, false);
   assert.equal(bili.initialTier, '');

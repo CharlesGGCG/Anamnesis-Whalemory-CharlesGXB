@@ -512,6 +512,21 @@ export function refreshInitialState(card) {
   // 不会每次 GET/refresh 又把它写回 true。
   const wasFirstMet = new Set(card.records.filter((record) => record.firstMet).map((record) => record.id));
 
+  // 2026-11-14 改：不再按「关系前 10 天随机锁 90%」标 initial —— 那会让 90% 的卡永久不可压缩
+  // （实测 387 条里 346 条被锁，压缩最多只能回收 4 千字）。
+  // 现在只锁：初次相遇 1 条 + 重要性最高的前 N 条（默认 30）。其余正常衰减；
+  // 早期细节仍可从全量档案（memory-card-full.jsonl）检索，不会凭空消失。
+  const INITIAL_KEEP = Math.max(1, Math.min(300, Number(card.meta?.initialKeep) || 30));
+  const firstMetId = String(card.meta?.firstMetEventId || earliest?.id || '');
+  const keptInitial = new Set(
+    ownerRecords
+      .filter((record) => record.id !== firstMetId)
+      .sort((a, b) => (Number(b.importance) || 0) - (Number(a.importance) || 0)
+        || timeOf(a.createdAt, 0) - timeOf(b.createdAt, 0))
+      .slice(0, INITIAL_KEEP)
+      .map((record) => record.id),
+  );
+
   for (const record of card.records) {
     const tags = new Set(asArray(record.tags));
     tags.delete('initial');
@@ -542,14 +557,12 @@ export function refreshInitialState(card) {
       continue;
     }
     record.anchor = record.pinned === true;
-    const offsetDays = firstAt
-      ? Math.max(0, Math.floor((timeOf(record.createdAt, firstAt) - firstAt) / DAY_MS))
-      : 0;
-    const probability = initialProbabilityForOffset(offsetDays);
-    record.initialTier = initialTierForOffset(offsetDays);
-    record.initialProbability = probability;
-    record.isInitial = stableInitialChance(record.id) < probability;
-    if (record.isInitial) tags.add('initial');
+    record.isInitial = keptInitial.has(record.id);
+    if (record.isInitial) {
+      record.initialTier = 'kept';
+      record.initialProbability = 1;
+      tags.add('initial');
+    }
     record.tags = [...tags];
   }
 }
