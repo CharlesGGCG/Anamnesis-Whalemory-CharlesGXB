@@ -15509,6 +15509,9 @@ async function main() {
       whoBlock,
       justBlock,
       ownerBlock,
+      // 记忆卡接回唤醒（2026-11-14）：之前只算 lastWakePromptMeta.memory 长度，是 11-08 改版的死代码。
+      // 现在按 mode 二选一：narrative 注入卡，vector 注入按消息检索到的旧事。
+      memoryCardText,
       rememberBlock,
       vaultBlock,
       nowBlock,
