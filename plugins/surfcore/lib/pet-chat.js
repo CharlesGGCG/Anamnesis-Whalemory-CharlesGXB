@@ -878,7 +878,7 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
     const memoryCharacterId = role.id || '';
     // 记忆图谱召回：把「想起的旧事」加进 system（失败退化成空，不阻塞）
     let graphMemory = '';
-    try { graphMemory = await graphRecallBlock(say) } catch {}
+    try { graphMemory = await graphRecallBlock(say, { characterId: memoryCharacterId }) } catch {}
     // 外置记忆库：只对主人开（访客不能看到主人的私事）；命中才注入 + 承诺清单
     let vaultText = '';
     if (who === 'owner') {
@@ -947,7 +947,7 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
       bumpIntimacy(who);
       lastChatAt = now;
       // 记忆图谱：后台抽取（fire-and-forget，不阻塞回复）
-      getMemoryGraph().then((mg) => mg.enqueue({ userMessage: `（对话角色：${role.name}）${say}`, aiResponse: reply })).catch(() => {});
+      getMemoryGraph(memoryCharacterId).then((mg) => mg.enqueue({ userMessage: `（对话角色：${role.name}）${say}`, aiResponse: reply })).catch(() => {});
       lastError = '';
       const latencyMs = Date.now() - startedAt;
       const out = {

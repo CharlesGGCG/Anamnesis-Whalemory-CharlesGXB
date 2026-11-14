@@ -12,6 +12,7 @@ import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'
 import { embedTexts, normalizeVectorMemoryConfig } from './vector-memory.js'
+import { memoryPathsFor, readCurrentCharacter } from './character-persona.js'
 
 const require = createRequire(import.meta.url)
 const { MemoryEngine, providers } = require('./memory-graph-engine/index.js')
@@ -131,25 +132,32 @@ export async function openMemoryGraph({ dir, provider, persona = {}, batchSize =
   }
 }
 
-// 懒加载单例：进程内共享一个引擎（插件进程 / 桥接进程各自一个，读写同一份数据目录）
-let _singleton = null
-export async function getMemoryGraph() {
-  if (_singleton) return _singleton
+// 懒加载：按「数据目录」分别缓存引擎（插件进程 / 桥接进程各自一份）。
+// 默认（characterId 为空）用全局目录；非当前角色用 characters/<id>/memory-graph，
+// 避免小C 和鲸鱼的记忆混在一张图里。
+const _singletons = new Map()
+export async function getMemoryGraph(characterId = '') {
   const cfg = loadMemoryGraphConfig()
-  const dir = String(cfg.dir || '').trim() || path.join(os.homedir(), '.dsh', 'surfcore', 'memory-graph')
-  _singleton = await openMemoryGraph({
+  const baseDir = String(cfg.dir || '').trim() || path.join(os.homedir(), '.dsh', 'surfcore', 'memory-graph')
+  const activeId = readCurrentCharacter()?.id || ''
+  const dir = !characterId || characterId === activeId
+    ? baseDir
+    : path.join(path.dirname(memoryPathsFor(characterId).dir), 'memory-graph')
+  if (_singletons.has(dir)) return _singletons.get(dir)
+  const engine = await openMemoryGraph({
     dir,
     provider: cfg,
     persona: { personaName: String(cfg.personaName || '小鲸鱼'), genderTerm: String(cfg.genderTerm || '主人') },
     batchSize: Number(cfg.batchSize) || 2,
   })
-  return _singleton
+  _singletons.set(dir, engine)
+  return engine
 }
 
 /** 召回并渲染成提示词块；任何失败都退化成空串（记忆是锦上添花，坏掉不报错）。 */
-export async function graphRecallBlock(text, { maxChars = 600 } = {}) {
+export async function graphRecallBlock(text, { maxChars = 600, characterId = '' } = {}) {
   try {
-    const g = await getMemoryGraph()
+    const g = await getMemoryGraph(characterId)
     const { promptText } = await g.recall(text)
     const s = String(promptText || '').trim()
     if (!s) return ''

@@ -48,7 +48,26 @@ test-memory-vault 11 组断言通过
 test-memory-card 27/27 通过
 ```
 
-## 六、生效与残余
+## 七、P3/P4 收尾（2026-11-14 晚）
+
+**小C 的日记**：`character-diary.mjs write|collect|list`
+
+- 存放 `characters/<id>/diary/YYYY-MM-DD.md`（北京时间，每条 `## HH:mm`）
+- `collect` 的数据源是**她自己的**记忆卡 + `pet/chat/history-claude.json`（不是鲸鱼的），
+  LLM 写第一人称 3~5 句 + 心情词，过 `redactForMemory`
+- 已生成第一篇：`characters/claude/diary/2026-11-15.md`（素材 134 条）
+
+**图谱按角色隔离**：
+
+- `getMemoryGraph(characterId)` 改为**按目录缓存**：默认仍是全局目录（鲸鱼数据不动），
+  非当前角色用 `characters/<id>/memory-graph`
+- `graphRecallBlock(text, { characterId })`；`pet-chat` 的召回与 enqueue 都带角色
+- 小C 的图目录已建好（`characters/claude/memory-graph`），不会再把她的对话写进鲸鱼的图
+
+验证：`collect --dry` 134 条素材生成正常；`getMemoryGraph('claude')` 建目录成功；
+test-memory-vault 11 组、test-memory-card 27/27。
+
+## 八、生效与残余
 
 - `pet-chat` / `memory-card` / `vault-inbox` 在插件进程里，**要 DSH 重启**才加载新逻辑
 - 桥接（QQ）仍用当前角色（小鲸鱼），无需改
