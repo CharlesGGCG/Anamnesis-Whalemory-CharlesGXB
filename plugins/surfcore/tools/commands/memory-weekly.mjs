@@ -25,8 +25,9 @@ const days = Math.max(1, Math.min(60, Number(args.get('days')) || 7))
 const dry = args.has('dry')
 const noLlm = args.has('no-llm')
 const scanOnly = args.has('scan')
+const characterId = String(args.get('character') ?? '').trim()
 
-const dir = vaultPaths().dir
+const dir = vaultPaths(characterId).dir
 const cardFile = path.join(dir, 'memory-card.json')
 if (!fs.existsSync(cardFile)) { console.error(`读不到记忆卡：${cardFile}`); process.exit(3) }
 const card = JSON.parse(fs.readFileSync(cardFile, 'utf8'))
@@ -125,6 +126,6 @@ if (dry) { console.log('（dry-run，未写入）'); process.exit(0) }
 
 fs.appendFileSync(mdFile, section, 'utf8')
 const vaultText = `第 ${Math.ceil(days / 7)} 周小结：${bullets.join('；')}`.slice(0, 480)
-const added = await addFromText(vaultText, { kind: 'event', importance: 3, source: 'weekly', useLLM: !noLlm })
+const added = await addFromText(vaultText, { kind: 'event', importance: 3, source: 'weekly', useLLM: !noLlm, ...(characterId ? { characterId } : {}) })
 console.log(`已写 ${mdFile}`)
 console.log(added.ok ? `已加入记忆库：${added.entry.id}` : `记忆库写入失败：${added.error}`)

@@ -23,6 +23,8 @@ for (let i = 1; i < argv.length; i += 1) {
   if (a.startsWith('--')) args.set(a.slice(2), argv[i + 1]?.startsWith('--') ? true : argv[++i] ?? true)
 }
 const flag = (name) => args.get(name) === true || args.has(name)
+const characterId = String(args.get('character') ?? '').trim()
+const charOpts = characterId ? { characterId } : {}
 
 function printEntry(e) {
   const info = e.dueAt ? dueInfo(e) : { text: '' }
@@ -43,6 +45,7 @@ if (cmd === 'add') {
     repeat: String(args.get('repeat') ?? ''),
     source: 'cli',
     useLLM: !flag('no-llm'),
+    ...charOpts,
   })
   if (!r.ok) { console.error(`失败：${r.error}`); process.exit(3) }
   console.log(r.updated ? '已更新同一条记忆：' : '已加入：')
@@ -55,6 +58,7 @@ if (cmd === 'list') {
     status: String(args.get('status') ?? ''),
     kind: String(args.get('kind') ?? ''),
     limit: Number(args.get('limit')) || 50,
+    ...charOpts,
   })
   if (!rows.length) { console.log('（记忆库是空的）'); process.exit(0) }
   for (const e of rows) printEntry(e)
@@ -64,14 +68,14 @@ if (cmd === 'list') {
 if (cmd === 'search') {
   const text = String(argv.slice(1).filter((a) => !a.startsWith('--')).join(' ') || args.get('text') || '').trim()
   if (!text) { console.error('需要要匹配的文本'); process.exit(2) }
-  const block = vaultPromptBlock(text)
+  const block = vaultPromptBlock(text, charOpts)
   console.log(block || '（没有命中）')
   process.exit(0)
 }
 
 if (cmd === 'due') {
   const within = Number(args.get('days')) || 3
-  const rows = listDue({ withinDays: within })
+  const rows = listDue({ withinDays: within, ...charOpts })
   if (!rows.length) { console.log(`（${within} 天内没有到期/过期的承诺）`); process.exit(0) }
   for (const e of rows) printEntry(e)
   process.exit(0)
@@ -80,7 +84,7 @@ if (cmd === 'due') {
 if (cmd === 'done' || cmd === 'rm') {
   const id = String(argv[1] ?? '')
   if (!id) { console.error('需要 id'); process.exit(2) }
-  const r = cmd === 'done' ? markVaultDone(id) : removeVaultEntry(id)
+  const r = cmd === 'done' ? markVaultDone(id, charOpts) : removeVaultEntry(id, charOpts)
   console.log(r.ok ? `已${cmd === 'done' ? '标记兑现' : '删除'}：${id}` : `失败：${r.error}`)
   process.exit(r.ok ? 0 : 3)
 }
@@ -88,7 +92,7 @@ if (cmd === 'done' || cmd === 'rm') {
 if (cmd === 'import-card') {
   const minImp = Number(args.get('min-importance')) || 65
   const dry = flag('dry')
-  const { dir, file: vaultFile } = vaultPaths()
+  const { dir, file: vaultFile } = vaultPaths(characterId)
   const json = path.join(dir, 'memory-card.json')
   let card
   try { card = JSON.parse(fs.readFileSync(json, 'utf8')) } catch { console.error(`读不到记忆卡：${json}`); process.exit(3) }
@@ -104,6 +108,7 @@ if (cmd === 'import-card') {
       importance: Math.min(5, Math.max(1, Math.round(Number(r.importance) / 20))),
       source: 'card-import',
       useLLM: flag('llm'),
+      ...charOpts,
     })
     if (out.ok) added += 1
   }

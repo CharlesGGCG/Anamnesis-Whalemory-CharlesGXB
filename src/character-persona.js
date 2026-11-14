@@ -178,6 +178,28 @@ export function legacyMemoryPaths() {
   };
 }
 
+/** 指定角色的记忆路径；characterId 为空 = 当前角色（向后兼容）。 */
+export function memoryPathsFor(characterId = '') {
+  const id = String(characterId || '').trim();
+  if (!id) return activeMemoryPaths();
+  const p = characterPaths(id);
+  return {
+    dir: p.memoryDir,
+    json: p.memoryJson,
+    markdown: p.memoryMd,
+    promptQq: p.memoryPromptQq,
+    promptBili: p.memoryPromptBili,
+    inbox: p.memoryInbox,
+    fullJsonl: p.memoryFullJsonl,
+    fullStats: p.memoryFullStats,
+    fullJson: path.join(p.memoryDir, 'memory-card-full.json'),
+    fullMarkdown: p.memoryFullMd,
+    qqForBili: path.join(p.memoryDir, 'qq-for-bili.md'),
+    biliForQq: path.join(p.memoryDir, 'bili-for-qq.md'),
+    characterId: id,
+  };
+}
+
 /** 当前角色记忆路径（没有角色系统时回退旧布局）。 */
 export function activeMemoryPaths() {
   const cur = readCurrentCharacter();

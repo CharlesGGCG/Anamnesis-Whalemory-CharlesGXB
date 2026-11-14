@@ -14,7 +14,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import crypto from 'node:crypto'
-import { activeMemoryPaths } from './character-persona.js'
+import { memoryPathsFor } from './character-persona.js'
 
 const DEFAULT_MIN_PROMISE_GAP_MS = 4 * 60 * 60 * 1000
 
@@ -22,8 +22,8 @@ function hashId(text) {
   return crypto.createHash('sha1').update(String(text ?? '').trim()).digest('hex').slice(0, 10)
 }
 
-export function vaultPaths() {
-  const dir = activeMemoryPaths().dir
+export function vaultPaths(characterId = '') {
+  const dir = memoryPathsFor(characterId).dir
   return { dir, file: path.join(dir, 'vault.json'), inbox: path.join(dir, 'vault-inbox.jsonl') }
 }
 
@@ -41,7 +41,7 @@ function writeJson(file, value) {
   fs.renameSync(tmp, file)
 }
 
-export function loadVault({ file = vaultPaths().file } = {}) {
+export function loadVault({ characterId = '', file = vaultPaths(characterId).file } = {}) {
   const raw = readJson(file, null)
   if (raw && typeof raw === 'object' && Array.isArray(raw.entries)) {
     return { version: 1, updatedAt: '', meta: {}, ...raw }
@@ -49,7 +49,7 @@ export function loadVault({ file = vaultPaths().file } = {}) {
   return { version: 1, updatedAt: new Date().toISOString(), meta: {}, entries: [] }
 }
 
-export function saveVault(vault, { file = vaultPaths().file } = {}) {
+export function saveVault(vault, { characterId = '', file = vaultPaths(characterId).file } = {}) {
   const next = { ...vault, version: 1, updatedAt: new Date().toISOString() }
   writeJson(file, next)
   return next
@@ -65,7 +65,7 @@ function normalizeKeywords(list) {
 }
 
 /** 加一条；正文相同视为同一条（更新而不是重复占位）。 */
-export function addVaultEntry(entry = {}, { file = vaultPaths().file, now = Date.now() } = {}) {
+export function addVaultEntry(entry = {}, { characterId = '', file = vaultPaths(characterId).file, now = Date.now() } = {}) {
   const text = String(entry.text ?? '').trim().slice(0, 500)
   if (!text) return { ok: false, error: '正文为空' }
   const vault = loadVault({ file })
@@ -106,7 +106,7 @@ export function addVaultEntry(entry = {}, { file = vaultPaths().file, now = Date
   return { ok: true, entry: base, updated: false }
 }
 
-export function listVault({ status = '', kind = '', limit = 50, file = vaultPaths().file } = {}) {
+export function listVault({ status = '', kind = '', limit = 50, characterId = '', file = vaultPaths(characterId).file } = {}) {
   const vault = loadVault({ file })
   return vault.entries
     .filter((e) => (!status || e.status === status) && (!kind || e.kind === kind))
@@ -114,7 +114,7 @@ export function listVault({ status = '', kind = '', limit = 50, file = vaultPath
     .slice(0, Math.max(1, limit))
 }
 
-export function markVaultDone(id, { file = vaultPaths().file, now = Date.now(), done = true } = {}) {
+export function markVaultDone(id, { characterId = '', file = vaultPaths(characterId).file, now = Date.now(), done = true } = {}) {
   const vault = loadVault({ file })
   const entry = vault.entries.find((e) => e.id === String(id))
   if (!entry) return { ok: false, error: '没有这条记忆' }
@@ -124,7 +124,7 @@ export function markVaultDone(id, { file = vaultPaths().file, now = Date.now(), 
   return { ok: true, entry }
 }
 
-export function removeVaultEntry(id, { file = vaultPaths().file } = {}) {
+export function removeVaultEntry(id, { characterId = '', file = vaultPaths(characterId).file } = {}) {
   const vault = loadVault({ file })
   const before = vault.entries.length
   vault.entries = vault.entries.filter((e) => e.id !== String(id))
@@ -200,7 +200,7 @@ export async function extractKeywordsLLM(text, { timeoutMs = 15_000 } = {}) {
 }
 
 /** 写入入口：优先 LLM 抽词，失败退回规则。 */
-export async function addFromText(text, { kind = '', importance = 0, source = 'manual', dueAt = '', repeat = '', file = vaultPaths().file, now = Date.now(), useLLM = true } = {}) {
+export async function addFromText(text, { kind = '', importance = 0, source = 'manual', dueAt = '', repeat = '', characterId = '', file = vaultPaths(characterId).file, now = Date.now(), useLLM = true } = {}) {
   const content = String(text ?? '').trim()
   if (!content) return { ok: false, error: '正文为空' }
   const llm = useLLM ? await extractKeywordsLLM(content) : null
@@ -293,7 +293,7 @@ export function dueInfo(entry, now = Date.now()) {
  * 快到期的年度日子（生日/纪念日）：7 天内才出现，20 小时冷却。
  * 和承诺不同，这类不需要「兑现」，只需要提前想起来。
  */
-export function upcomingPromptBlock({ withinDays = 7, limit = 5, maxChars = 300, minGapMs = 20 * 60 * 60 * 1000, ignoreGap = false, touch = true, file = vaultPaths().file, now = Date.now() } = {}) {
+export function upcomingPromptBlock({ withinDays = 7, limit = 5, maxChars = 300, minGapMs = 20 * 60 * 60 * 1000, ignoreGap = false, touch = true, characterId = '', file = vaultPaths(characterId).file, now = Date.now() } = {}) {
   try {
     const vault = loadVault({ file })
     const last = Number(vault.meta?.lastUpcomingPromptAt) || 0
@@ -312,7 +312,7 @@ export function upcomingPromptBlock({ withinDays = 7, limit = 5, maxChars = 300,
 }
 
 /** 列出 N 天内到期/已过期的承诺（CLI 用）。 */
-export function listDue({ withinDays = 3, file = vaultPaths().file, now = Date.now() } = {}) {
+export function listDue({ withinDays = 3, characterId = '', file = vaultPaths(characterId).file, now = Date.now() } = {}) {
   const vault = loadVault({ file })
   return vault.entries
     .filter((e) => e.kind === 'promise' && e.status === 'pending')
@@ -326,7 +326,7 @@ export function listDue({ withinDays = 3, file = vaultPaths().file, now = Date.n
  * 到期提醒：今天到期 / 已经过期的承诺，20 小时最多注入一次。
  * 不管关键词有没有命中都要出现——「答应的事」漏一次就是事故。
  */
-export function dueTodayPromptBlock({ limit = 5, maxChars = 400, minGapMs = 20 * 60 * 60 * 1000, ignoreGap = false, touch = true, file = vaultPaths().file, now = Date.now() } = {}) {
+export function dueTodayPromptBlock({ limit = 5, maxChars = 400, minGapMs = 20 * 60 * 60 * 1000, ignoreGap = false, touch = true, characterId = '', file = vaultPaths(characterId).file, now = Date.now() } = {}) {
   try {
     const vault = loadVault({ file })
     const last = Number(vault.meta?.lastDuePromptAt) || 0
@@ -347,7 +347,7 @@ export function dueTodayPromptBlock({ limit = 5, maxChars = 400, minGapMs = 20 *
  * 每轮调用：拿当前这句话去匹配，命中才返回（没命中返回 ''，不占 prompt）。
  * 顺带把命中次数记下来，用于以后调权。
  */
-export function vaultPromptBlock(text, { maxEntries = 3, maxChars = 600, file = vaultPaths().file, now = Date.now() } = {}) {
+export function vaultPromptBlock(text, { maxEntries = 3, maxChars = 600, characterId = '', file = vaultPaths(characterId).file, now = Date.now() } = {}) {
   try {
     const vault = loadVault({ file })
     const ranked = vault.entries
@@ -368,7 +368,7 @@ export function vaultPromptBlock(text, { maxEntries = 3, maxChars = 600, file = 
  * 承诺清单：默认 4 小时最多注入一次（ignoreGap=true 时每次都注入，比如 B站 醒来）。
  * 只列 pending 的；过期未兑现的也会列出来（提醒她补救）。
  */
-export function promisePromptBlock({ limit = 5, maxChars = 400, minGapMs = DEFAULT_MIN_PROMISE_GAP_MS, ignoreGap = false, touch = true, file = vaultPaths().file, now = Date.now() } = {}) {
+export function promisePromptBlock({ limit = 5, maxChars = 400, minGapMs = DEFAULT_MIN_PROMISE_GAP_MS, ignoreGap = false, touch = true, characterId = '', file = vaultPaths(characterId).file, now = Date.now() } = {}) {
   try {
     const vault = loadVault({ file })
     const last = Number(vault.meta?.lastPromisePromptAt) || 0
@@ -385,7 +385,7 @@ export function promisePromptBlock({ limit = 5, maxChars = 400, minGapMs = DEFAU
 
 // ── 自动捕获队列（工具/桥接写，插件进程抽词入库）──────────────────────────
 
-export function pushVaultCandidate(text, { source = 'qq', file = vaultPaths().inbox } = {}) {
+export function pushVaultCandidate(text, { source = 'qq', characterId = '', file = vaultPaths(characterId).inbox } = {}) {
   try {
     const content = String(text ?? '').trim()
     if (content.length < 4) return { ok: false, reason: 'too-short' }
@@ -395,7 +395,7 @@ export function pushVaultCandidate(text, { source = 'qq', file = vaultPaths().in
   } catch (error) { return { ok: false, reason: String(error?.message ?? error) } }
 }
 
-export function takeVaultCandidates({ file = vaultPaths().inbox } = {}) {
+export function takeVaultCandidates({ characterId = '', file = vaultPaths(characterId).inbox } = {}) {
   try {
     if (!fs.existsSync(file)) return { ok: true, items: [], moved: '' }
     const moved = `${file}.processing`
@@ -414,7 +414,7 @@ export function commitVaultCandidates(moved) {
   try { if (moved) fs.unlinkSync(moved); return { ok: true } } catch { return { ok: false } }
 }
 
-export function rollbackVaultCandidates(moved, { file = vaultPaths().inbox } = {}) {
+export function rollbackVaultCandidates(moved, { characterId = '', file = vaultPaths(characterId).inbox } = {}) {
   try {
     if (!moved || !fs.existsSync(moved)) return { ok: false }
     fs.appendFileSync(file, fs.readFileSync(moved, 'utf8'), 'utf8')

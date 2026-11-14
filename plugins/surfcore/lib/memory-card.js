@@ -12,9 +12,10 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { BACKUP_DIR, QQ_CONFIG, QQ_STATE_DIR, maskPath } from './paths.js';
 import {
-  activeMemoryPaths, activePlatformStateDir,
+  activeMemoryPaths, memoryPathsFor, listCharacters,
 } from '../../../src/character-persona.js';
 import { backupFile, listBackups, readJson, readUnified, writeJsonAtomic, writeTextAtomic } from './store.js';
 import {
@@ -28,14 +29,23 @@ import {
 const EMPTY_CONFIG = normalizeMemoryCardConfig({});
 const TICK_MS = 10 * 60 * 1000;
 
-/** 当前角色的记忆路径；没有角色系统时回退旧布局。每次调用都重新解析（切换角色后立即生效）。 */
-function pathsNow() {
-  return activeMemoryPaths();
+// 记忆路径按「当前上下文」解析：默认是当前角色；维护/操作某个角色时用 withCharacterPaths 包一层。
+// 用 AsyncLocalStorage 而不是全局变量，避免维护小C 时把正在查询的小鲸鱼 状态带偏。
+const characterPathsStore = new AsyncLocalStorage();
+
+function withCharacterPaths(paths, fn) {
+  return characterPathsStore.run(paths, fn);
 }
 
-/** 当前角色的 B站 行为目录；旧布局回退到仓库 state/。 */
+/** 当前上下文角色的记忆路径；没有上下文时 = 当前角色（切换角色后立即生效）。 */
+function pathsNow() {
+  return characterPathsStore.getStore() || activeMemoryPaths();
+}
+
+/** 当前上下文角色的 B站 行为目录；旧布局回退到仓库 state/。 */
 function biliStateDir() {
-  return activePlatformStateDir(QQ_STATE_DIR);
+  // 跟着记忆上下文走：维护小C 时读她自己的 bili/（没有就是空）
+  return path.join(path.dirname(pathsNow().dir), 'bili');
 }
 
 function biliMemoryFile() {
@@ -300,8 +310,9 @@ export function fullMemoryCardSnapshot({ q = '', limit = 40, config = memoryCard
 }
 
 /** 真正跑一次维护；并发调用会排队，不会互相覆盖。 */
-export function runMemoryCardMaintenance({ forceDecay = false, config = memoryCardConfig(), now = Date.now(), runtimeSharing = memoryCardRuntimeSharing() } = {}) {
-  return serialize(async () => {
+export function runMemoryCardMaintenance({ forceDecay = false, config = memoryCardConfig(), now = Date.now(), runtimeSharing = memoryCardRuntimeSharing(), characterId = '' } = {}) {
+  const targetPaths = memoryPathsFor(characterId);
+  return serialize(() => withCharacterPaths(targetPaths, async () => {
     if (config.enabled === false) {
       // 关掉记忆卡时要清空注入块：桥接只认文件，留着旧文件等于「设置关了但提示词还在」。
       try { writeTextAtomic(pathsNow().promptQq, ''); } catch {}
@@ -353,7 +364,7 @@ export function runMemoryCardMaintenance({ forceDecay = false, config = memoryCa
       fullStatus: result.full?.status ?? fullMemoryCardStatus(pathsNow(), config, now),
       card: result.card,
     };
-  });
+  }));
 }
 
 /** 手动压缩到目标比例（默认 80%）。 */
@@ -467,8 +478,8 @@ export function restoreMemoryCardBackup(name, { config = memoryCardConfig(), now
 }
 
 /** B站调度器 / 调试用：读现成的 B站 注入块（mtime 缓存，避免每次重复读盘）。 */
-export function memoryCardPromptBlock(platform = 'bili') {
-  const paths = pathsNow();
+export function memoryCardPromptBlock(platform = 'bili', characterId = '') {
+  const paths = memoryPathsFor(characterId);
   const file = platform === 'bili' ? paths.promptBili : paths.promptQq;
   const cacheKey = `${platform}:${paths.dir}`;
   try {
@@ -524,15 +535,22 @@ export function startMemoryCardTimer({ log = () => {}, callBridge } = {}) {
   let initial = null;
   const tick = async () => {
     if (stopped) return;
-    try {
-      const result = await runMemoryCardMaintenance();
-      if (result.disabled) return;
-      if (result.changed) {
-        log(`记忆卡已整理：新增 B站 ${result.addedBili ?? 0} 条 / QQ ${result.addedQq ?? 0} 条${result.addedPet ? ` / 桌宠 ${result.addedPet} 条` : ''}，当前 ${result.status.percent}%（${result.status.chars}/${result.status.maxChars} 字）`);
+    // 每个角色一张卡（小鲸鱼 / 小C …），逐个维护；没有角色系统时退回当前角色。
+    const chars = listCharacters();
+    const targets = chars.length ? chars : [{ id: '', name: '当前角色', current: true }];
+    for (const target of targets) {
+      try {
+        const result = await runMemoryCardMaintenance({ characterId: target.id });
+        if (result.disabled) continue;
+        if (result.changed) {
+          const tag = target.id ? `[${target.name}] ` : '';
+          log(`${tag}记忆卡已整理：新增 B站 ${result.addedBili ?? 0} 条 / QQ ${result.addedQq ?? 0} 条${result.addedPet ? ` / 桌宠 ${result.addedPet} 条` : ''}，当前 ${result.status.percent}%（${result.status.chars}/${result.status.maxChars} 字）`);
+        }
+        // 容量告警只对当前角色发（别拿小C 的卡给主人发「记忆卡满了」）
+        if (!target.id || target.current) await notifyOwnerIfNeeded({ callBridge, log });
+      } catch (error) {
+        log(`记忆卡整理失败（${target.name || '当前角色'}）：`, error?.message ?? error);
       }
-      await notifyOwnerIfNeeded({ callBridge, log });
-    } catch (error) {
-      log('记忆卡整理失败：', error?.message ?? error);
     }
   };
   initial = setTimeout(() => { void tick(); }, 8_000);

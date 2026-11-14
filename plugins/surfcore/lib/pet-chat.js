@@ -24,7 +24,7 @@ import { readBiliConfig, readQqConfig, readUnified, writeJsonAtomic } from './st
 import { resolvePersonaFile } from './persona.js';
 import { memoryCardPromptBlock } from './memory-card.js';
 import { vaultPromptBlock, promisePromptBlock, dueTodayPromptBlock, upcomingPromptBlock, pushVaultCandidate, isRememberText } from '../../../src/memory-vault.js';
-import { activeMemoryPaths, characterPaths, readCurrentCharacter, readManifest, readPersonaLayerText } from '../../../src/character-persona.js';
+import { memoryPathsFor, characterPaths, readCurrentCharacter, readManifest, readPersonaLayerText } from '../../../src/character-persona.js';
 import { buildPersonaIdentity, personaNameFromCard } from '../../../src/persona-identity.js';
 import { composePersonaLayers } from '../../../src/persona-layers.js';
 import { adminFromSources } from '../../../src/admin-identity.js';
@@ -368,10 +368,10 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
     return { id: cur?.id || characterId || '', name, persona, personaFile, hasPersona: Boolean(persona) };
   }
 
-  function memoryBlock() {
+  function memoryBlock(characterId = '') {
     const unified = unifiedConfig();
     if (unified?.memoryCard?.enabled === false) return '';
-    try { return String(memoryCardPromptBlock('qq') || '').trim(); } catch { return ''; }
+    try { return String(memoryCardPromptBlock('qq', characterId) || '').trim(); } catch { return ''; }
   }
 
   function purposeStateFile() {
@@ -405,7 +405,7 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
   // 只追加 inbox（轻量、原子），真正的评分/脱敏/衰减由插件维护器做。
   // inbox 是叙事记忆与向量记忆共同的原料：只要任意一套存储还开着，就必须继续写；
   // 不能因为用户关掉「叙事记忆卡」就顺带饿死独立的向量记忆。
-  function rememberEvents(events) {
+  function rememberEvents(events, characterId = '') {
     if (!Array.isArray(events) || !events.length) return 0;
     if (!settings().chat.remember) return 0;
     const unified = unifiedConfig();
@@ -414,7 +414,8 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
     if (!cardEnabled && !vectorEnabled) return 0;
     let written = 0;
     try {
-      const paths = activeMemoryPaths();
+      // 按角色写各自的 inbox：小C 的记忆不能落到小鲸鱼 的卡里
+      const paths = memoryPathsFor(characterId);
       for (const event of events) {
         if (appendMemoryInboxEvent(paths, event)) written += 1;
       }
@@ -873,16 +874,25 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
     const role = roleInfo(characterId);
     const owner = ownerInfo();
     const speaker = who === 'guest' ? '访客' : owner.name;
+    // 每个角色有自己的记忆卡/vault（小鲸鱼 / 小C 互不串）
+    const memoryCharacterId = role.id || '';
     // 记忆图谱召回：把「想起的旧事」加进 system（失败退化成空，不阻塞）
     let graphMemory = '';
     try { graphMemory = await graphRecallBlock(say) } catch {}
     // 外置记忆库：只对主人开（访客不能看到主人的私事）；命中才注入 + 承诺清单
     let vaultText = '';
     if (who === 'owner') {
-      try { vaultText = [vaultPromptBlock(say), promisePromptBlock(), dueTodayPromptBlock(), upcomingPromptBlock()].filter(Boolean).join('\n') } catch {}
-      try { if (isRememberText(say)) pushVaultCandidate(say, { source: 'web' }) } catch {}
+      try {
+        vaultText = [
+          vaultPromptBlock(say, { characterId: memoryCharacterId }),
+          promisePromptBlock({ characterId: memoryCharacterId }),
+          dueTodayPromptBlock({ characterId: memoryCharacterId }),
+          upcomingPromptBlock({ characterId: memoryCharacterId }),
+        ].filter(Boolean).join('\n');
+      } catch {}
+      try { if (isRememberText(say)) pushVaultCandidate(say, { source: 'web', characterId: memoryCharacterId }) } catch {}
     }
-    const system = buildChatSystemPrompt({ role, owner, memory: memoryBlock() + (graphMemory ? `\n${graphMemory}` : ''), purpose: purposeBackground(), modality: mode, identity: who, intimacy, web, vault: vaultText });
+    const system = buildChatSystemPrompt({ role, owner, memory: memoryBlock(memoryCharacterId) + (graphMemory ? `\n${graphMemory}` : ''), purpose: purposeBackground(), modality: mode, identity: who, intimacy, web, vault: vaultText });
     const user = [
       history.messages.length ? '【最近聊天】' : '',
       history.messages.length ? formatHistory(history, s.chat.historyTurns, say, speaker) : say,
@@ -933,11 +943,11 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
         conversationKey: web
           ? (who === 'guest' ? 'private:web-guest' : (owner.qq ? `private:${owner.qq}` : 'private:owner'))
           : 'pet',
-      }));
+      }), memoryCharacterId);
       bumpIntimacy(who);
       lastChatAt = now;
       // 记忆图谱：后台抽取（fire-and-forget，不阻塞回复）
-      getMemoryGraph().then((mg) => mg.enqueue({ userMessage: say, aiResponse: reply })).catch(() => {});
+      getMemoryGraph().then((mg) => mg.enqueue({ userMessage: `（对话角色：${role.name}）${say}`, aiResponse: reply })).catch(() => {});
       lastError = '';
       const latencyMs = Date.now() - startedAt;
       const out = {
@@ -1001,7 +1011,7 @@ export function createPetChatService({ ctx, stateDir, pluginLog = () => {}, toke
       replyText: body,
       at: now,
       roleName: roleInfo().name,
-    }));
+    }), roleInfo().id);
     lastProactiveAt = now;
     emit({
       type: 'proactive',
