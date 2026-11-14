@@ -398,16 +398,21 @@ function toast(text, kind = 'info', ttl = 4200) {
   let devMode = false
   let identity = 'guest'
 
-  function herAvatar() {
-    return currentRoom === 'claude' ? '/claude-144.webp' : '/avatar-144.webp'
+  function avatarFor(characterId) {
+    return String(characterId || '') === 'claude' ? '/claude-144.webp' : '/avatar-144.webp'
   }
 
-  function bubbleNode(role, text) {
+  function herAvatar() {
+    return avatarFor(ROOM_CHARS[currentRoom] || '')
+  }
+
+  function bubbleNode(role, text, characterId = '') {
     const row = document.createElement('div')
     row.className = 'row ' + role
     if (role === 'her') {
       const av = document.createElement('img')
-      av.className = 'avatar'; av.src = herAvatar(); av.alt = '🐋'
+      const cid = String(characterId || '').trim()
+      av.className = 'avatar'; av.src = cid ? avatarFor(cid) : herAvatar(); av.alt = cid === 'claude' ? '🍂' : '🐋'
       row.appendChild(av)
     }
     const b = document.createElement('div')
@@ -416,9 +421,9 @@ function toast(text, kind = 'info', ttl = 4200) {
     return row
   }
 
-  function addBubble(role, text) {
+  function addBubble(role, text, characterId = '') {
     if (!text) return
-    const row = bubbleNode(role, text)
+    const row = bubbleNode(role, text, characterId)
     msgs.appendChild(row)
     scroller.scrollTop = scroller.scrollHeight
     return row
@@ -504,7 +509,7 @@ function toast(text, kind = 'info', ttl = 4200) {
       const r = await fetch('/api/history?limit=60&characterId=' + encodeURIComponent(characterId)).then(r => r.json())
       const list = Array.isArray(r && r.messages) ? r.messages : []
       if (list.length) {
-        for (const m of list) addBubble(m.role === 'assistant' ? 'her' : 'me', m.text)
+        for (const m of list) addBubble(m.role === 'assistant' ? 'her' : 'me', m.text, characterId)
       } else {
         addBubble('her', currentRoom === 'claude' ? '你来了。有什么想问我的？' : '你来了呀～我是小鲸鱼。🐋 今天过得怎么样？')
       }
@@ -797,7 +802,7 @@ function toast(text, kind = 'info', ttl = 4200) {
         $('thread').innerHTML = ''
         for (const m of list) {
           if (m.sender === 'owner') addBubble('me', m.text)
-          else addBubble('her', (m.name && m.name !== '小鲸鱼' ? '【' + m.name + '】' : '') + m.text)
+          else addBubble('her', (m.name && m.name !== '小鲸鱼' ? '【' + m.name + '】' : '') + m.text, m.sender)
         }
         scroller.scrollTop = scroller.scrollHeight
       }
