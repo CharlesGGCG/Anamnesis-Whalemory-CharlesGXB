@@ -232,7 +232,18 @@
 
   @media (max-width: 1000px) {
     .app, .app.dev { grid-template-columns: 1fr; }
-    .panel.left, .panel.right, .resizer { display: none; }
+    .panel.left, .resizer { display: none; }
+    /* 手机上右栏默认收起；开发者点 🧠 时铺满一屏，而不是干脆看不到 */
+    .panel.right { display: none; }
+    .panel.right:not(.hidden) {
+      display: flex;
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      width: auto;
+      background: var(--canvas);
+      border-left: 0;
+    }
   }
 </style>
 </head>
@@ -241,7 +252,7 @@
   <!-- 邀请门 -->
   <div id="gate" class="gate">
     <div class="gate-card">
-      <img class="avatar" src="/avatar.png" alt="🐋">
+      <img class="avatar" src="/avatar-144.webp" width="72" height="72" alt="🐋" decoding="async">
       <h1>小鲸鱼</h1>
       <p class="gate-sub">她住在这台电脑里，等你来。</p>
       <input id="invite" placeholder="邀请码" autocomplete="off">
@@ -277,8 +288,8 @@
     <section class="center">
       <header>
         <div class="head-avatars" id="head-avatars">
-          <img class="avatar" id="head-avatar" src="/avatar.png" alt="🐋">
-          <img class="avatar second" id="head-avatar2" src="/claude.png?v=3" alt="🍂" style="display:none">
+          <img class="avatar" id="head-avatar" src="/avatar-144.webp" width="40" height="40" alt="🐋" decoding="async">
+          <img class="avatar second" id="head-avatar2" src="/claude-144.webp" width="40" height="40" alt="🍂" style="display:none" decoding="async">
         </div>
         <div>
           <h1>小鲸鱼</h1>
@@ -346,7 +357,7 @@
   let identity = 'guest'
 
   function herAvatar() {
-    return currentRoom === 'claude' ? '/claude.png?v=3' : '/avatar.png'
+    return currentRoom === 'claude' ? '/claude-144.webp' : '/avatar-144.webp'
   }
 
   function bubbleNode(role, text) {
@@ -501,7 +512,8 @@
   $('sc-interval').onchange = (e) => saveScreen({ intervalMs: Number(e.target.value) * 1000 })
   $('sc-cooldown').oninput = (e) => { $('sc-cooldown-v').textContent = e.target.value + 'min' }
   $('sc-cooldown').onchange = (e) => saveScreen({ cooldownMs: Number(e.target.value) * 60000 })
-  setInterval(loadScreen, 10000)
+  // 只有开发者才需要轮询陪看状态；访客不轮询（以前访客每 10 秒被 403 一次，白烧请求）。
+  if (devMode) setInterval(() => { if (!document.hidden) loadScreen() }, 15000)
 
   async function pollStatus() {
     try {
@@ -687,13 +699,13 @@
     const av2 = $('head-avatar2')
     if (!av1) return
     if (room === 'lounge') {
-      av1.src = '/avatar.png'
+      av1.src = '/avatar-144.webp'
       if (av2) av2.style.display = 'block'
     } else if (room === 'claude') {
-      av1.src = '/claude.png?v=3'
+      av1.src = '/claude-144.webp'
       if (av2) av2.style.display = 'none'
     } else {
-      av1.src = '/avatar.png'
+      av1.src = '/avatar-144.webp'
       if (av2) av2.style.display = 'none'
     }
   }
@@ -718,7 +730,7 @@
   async function startLounge() {
     stopLounge()
     await pollLounge()
-    loungeTimer = setInterval(pollLounge, 3000)
+    loungeTimer = setInterval(() => { if (!document.hidden) pollLounge() }, 3000)
   }
   async function pollLounge() {
     try {

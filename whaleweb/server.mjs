@@ -4,6 +4,7 @@ import path from 'node:path'
 import os from 'node:os'
 import net from 'node:net'
 import crypto from 'node:crypto'
+import zlib from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -322,9 +323,28 @@ function authorized(req) {
   return identityOf(req) !== ''
 }
 
+// 文本类响应做 brotli/gzip 压缩：页面 39KB 不压缩时慢网首屏很明显。
+// 只压 >1KB 的文本/JSON/JS/SVG；图片和流不碰（content-length 必须与压缩后一致）。
 function send(res, code, body, type = 'application/json; charset=utf-8') {
-  res.writeHead(code, { 'content-type': type })
-  res.end(typeof body === 'string' ? body : JSON.stringify(body))
+  let buf = Buffer.isBuffer(body) ? body : Buffer.from(typeof body === 'string' ? body : JSON.stringify(body))
+  const headers = { 'content-type': type }
+  const ae = String(res.req?.headers?.['accept-encoding'] || '')
+  if (buf.length > 1024 && /^(text\/|application\/(json|javascript|xml)|image\/svg)/i.test(type)) {
+    try {
+      if (/\bbr\b/.test(ae)) {
+        buf = zlib.brotliCompressSync(buf)
+        headers['content-encoding'] = 'br'
+        headers.vary = 'Accept-Encoding'
+      } else if (/\bgzip\b/.test(ae)) {
+        buf = zlib.gzipSync(buf)
+        headers['content-encoding'] = 'gzip'
+        headers.vary = 'Accept-Encoding'
+      }
+    } catch {}
+  }
+  headers['content-length'] = buf.length
+  res.writeHead(code, headers)
+  res.end(buf)
 }
 
 const indexHtml = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8')
@@ -584,8 +604,28 @@ const server = http.createServer(async (req, res) => {
       if (fs.existsSync(file) && fs.statSync(file).isFile()) {
         const types = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.css': 'text/css', '.js': 'text/javascript' }
         const type = types[path.extname(file).toLowerCase()] || 'application/octet-stream'
-        const cache = /\.(png|jpe?g|webp|svg)$/i.test(rel) ? 'no-cache' : 'public, max-age=86400'
-        res.writeHead(200, { 'content-type': type, 'cache-control': cache })
+        const stat = fs.statSync(file)
+        // 图片文件名带尺寸/版本（avatar-144.webp），可以放心长缓存；周更级别。
+        const isImage = /\.(png|jpe?g|webp|svg|ico)$/i.test(rel)
+        const headers = {
+          'content-type': type,
+          'cache-control': isImage ? 'public, max-age=604800, immutable' : 'public, max-age=86400',
+          'last-modified': stat.mtime.toUTCString(),
+        }
+        // 文本类静态文件（css/js）也做压缩
+        const ae = String(req.headers['accept-encoding'] || '')
+        if (!isImage && stat.size > 1024 && /^(text\/|application\/(json|javascript|xml))/i.test(type)) {
+          let buf = fs.readFileSync(file)
+          try {
+            if (/\bbr\b/.test(ae)) { buf = zlib.brotliCompressSync(buf); headers['content-encoding'] = 'br'; headers.vary = 'Accept-Encoding' }
+            else if (/\bgzip\b/.test(ae)) { buf = zlib.gzipSync(buf); headers['content-encoding'] = 'gzip'; headers.vary = 'Accept-Encoding' }
+          } catch {}
+          headers['content-length'] = buf.length
+          res.writeHead(200, headers)
+          res.end(buf)
+          return
+        }
+        res.writeHead(200, headers)
         fs.createReadStream(file).pipe(res)
         return
       }
