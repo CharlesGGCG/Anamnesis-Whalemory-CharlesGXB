@@ -115,3 +115,12 @@ status playing=true audioTime 1.45 → 3.45 → 5.44
 → [唱歌] 口型同步播放已开始 / 开始《bangbangbang - silly funk》（口型同步）
 → 截图：嘴张开（docs/assets/live/lip-open.png）
 ```
+
+## 八、歌词：Spotify 拿不到，改用 QQ 音乐 LRC（2026-11-14 22:1x）
+
+- **Spotify 公开 API 不提供歌词**（歌词是 Musixmatch 授权，只在 App 内渲染）；LRCLIB 也搜不到这首
+- 实际来源：QQ 音乐 `fcg_query_lyric_new` 接口（songmid `002BC5lA1GQgHC`），返回带时间轴的 LRC 与 104 秒原曲时长
+- 对齐：B站 版本 101.98 秒，按 `101.98/104 = 0.981` 缩放所有时间戳 → `songs/bangbangbang.lrc`（50 行）
+- 歌词显示：OBS `text_ft2_source_v2`，字号 48、位置 (260,900)@1080p；**必须 `SetSceneItemIndex` 置顶**，
+  否则会被全屏的「场景页」盖住（这是之前“设置成功但看不见”的原因）
+- 注意：`GetSourceScreenshot` 在 SetInputSettings 后会有**一帧延迟**，截图要等 300ms 以上，别误判成没设置
