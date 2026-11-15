@@ -173,12 +173,24 @@ export function createPetApiService({ chat, purpose, live, petService, screen, s
       return;
     }
     if (suffix === '/live/status') { json(res, 200, live ? { ok: true, ...live.status() } : { ok: false, error: '直播服务未加载' }); return }
-    if (req.method === 'POST' && suffix === '/live/start') { json(res, live ? await live.start() : { ok: false, error: '直播服务未加载' }); return }
-    if (req.method === 'POST' && suffix === '/live/stop') { json(res, live ? await live.stop() : { ok: false, error: '直播服务未加载' }); return }
-    if (req.method === 'POST' && suffix === '/live/test') {
-      let body = {}
-      try { body = JSON.parse((await readBody(req, PET_BODY_LIMIT)) || '{}') } catch {}
-      json(res, live ? { ok: true, ...(await live.test(body)) } : { ok: false, error: '直播服务未加载' })
+    if (req.method === 'POST' && (suffix === '/live/start' || suffix === '/live/stop' || suffix === '/live/test')) {
+      // 直播接口可能卡在 B站/L2D 网络调用上：统一加 12s 超时，失败也要有可见的 JSON。
+      const withTimeout = (p, ms = 12000) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('直播接口超时')), ms))])
+      try {
+        if (!live) { json(res, 200, { ok: false, error: '直播服务未加载' }); return }
+        let result
+        if (suffix === '/live/start') result = await withTimeout(live.start())
+        else if (suffix === '/live/stop') result = await withTimeout(live.stop())
+        else {
+          let body = {}
+          try { body = JSON.parse((await readBody(req, PET_BODY_LIMIT)) || '{}') } catch {}
+          result = { ok: true, ...(await withTimeout(live.test(body))) }
+        }
+        json(res, 200, result)
+      } catch (error) {
+        pluginLog('[直播] 接口出错：', String(error?.message ?? error).slice(0, 160))
+        json(res, 500, { ok: false, error: String(error?.message ?? error).slice(0, 160) })
+      }
       return
     }
     if (req.method === 'POST' && suffix === '/chat') {

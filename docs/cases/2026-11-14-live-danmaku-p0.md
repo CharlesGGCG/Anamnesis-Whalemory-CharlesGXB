@@ -49,3 +49,26 @@ L2D /api/studio/state → 1 个 ready client（presentation=obs，audioReady=fal
 - **`audioReady=false`**：OBS 浏览器源还没点过「启用声音」——OBS 里右键 `场景页` → 交互 → 点一下页面即可
 - P0 只读不回；P0.5 接 pet-chat 生成回复；唱歌在 P1
 - 真房间目前没开播/没人说话，等开播后再看真实弹幕流
+
+## 五、验证结果（2026-11-14 19:24）
+
+```text
+live.mjs test --author 晚风 --text "晚上好，能听到吗"
+→ readCount: 1
+→ lastSpoken: 「晚风」说：晚上好，能听到吗
+→ plugin.log: [直播] 念弹幕：「晚风」说：晚上好，能听到吗
+```
+
+**读弹幕链路已打通**：B站事件 → 队列 → 导演 → L2D speak → TTS/口型。
+
+### 卡点：`audioReady=false`（已解决）
+
+- OBS 场景页是 `?clean=1`，控制条被隐藏，没有「启用声音」按钮可点
+- 处理：给 L2D 的 `web/scene-experiment.mjs` 打了一个最小补丁（备份 `scene-experiment.mjs.bak-20261114-audiounlock`）：
+  `clean` 模式下在页面任意位置 `pointerdown` 也会调用 `audioInit()`
+- 之后在 OBS 交互窗口里点一下，`audioReady` 变 true
+
+### 另一个坑：`/live/*` 的 POST 会挂住
+
+- `GET /live/status` 43ms 正常；`POST /live/start|stop|test` 全部超时（`/chat` POST 正常）
+- 已给三个接口加 **12s 超时 + 错误 JSON**（不再无限挂），需要重启插件后验证根因
