@@ -35,3 +35,22 @@ OBS 截图：场景铺满 1920x1080 画布，底部出现「这是第一句歌�
 - 播放期间**暂停读弹幕**（director.paused），唱完恢复
 - 口型不同步 —— v1.5 需要 L2D 暴露「播放本地音频 + 振幅驱动口型」接口
 - 测试音 `test-tone.wav` 是自检用素材，正式曲库需要自己放音频/LRC
+
+## 五、全链路实测（2026-11-14 21:48）
+
+```text
+/live/test "点歌 测试音"
+→ push: { ok: true, song: "测试音" }
+→ t+2.5s singing=true playing=测试音 paused=true
+→ t+5s   lyrics="这是第一句歌词"
+→ t+7.5s lyrics="这是第二句歌词"
+→ t+10s  singing=false paused=false（唱完恢复读弹幕）
+plugin.log: 晚风 点了《测试音》→ 开始播放 test-tone.wav → 这首结束
+```
+
+**点歌 → 排队 → 播放 → 歌词 → 恢复读弹幕** 全链路通过。
+
+- 歌声进 OBS 混音器（媒体源在画布外，只出声不上画面）
+- 唱歌期间 `director.paused=true`，不抢话
+- 附带小修：唱完清空 `lastLyric`
+- 待办：点歌那句「好，下一首《X》」需要 `audioReady=true`（OBS 交互点一次「启用声音」），否则只有文字日志

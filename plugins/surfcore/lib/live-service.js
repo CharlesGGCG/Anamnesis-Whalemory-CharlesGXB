@@ -112,6 +112,7 @@ export function createLiveService({ stateDir, pluginLog = () => {}, config = nul
     queue.done()
     singing = false
     nowSong = null
+    lastLyric = ''
     director.setPaused(false)
     void player.stop()
     pluginLog('[唱歌] 这首结束')
