@@ -56,6 +56,7 @@ export function createLiveDirector({ stage, brain = null, config = {}, log = () 
   const recentDmids = new Set()
   const minuteStamps = []
   let running = false
+  let paused = false
   let speaking = false
   let lastReadAt = 0
   let readCount = 0
@@ -86,7 +87,7 @@ export function createLiveDirector({ stage, brain = null, config = {}, log = () 
   }
 
   async function tick() {
-    if (!running || speaking || !queue.length) return
+    if (!running || paused || speaking || !queue.length) return
     const now = Date.now()
     if (now - lastReadAt < cfg.minGapMs) return
     const recent = minuteStamps.filter((t) => now - t < 60_000)
@@ -138,6 +139,8 @@ export function createLiveDirector({ stage, brain = null, config = {}, log = () 
     void tick()
   }
 
+  function setPaused(value) { paused = Boolean(value) }
+
   function stop() {
     running = false
     if (timer) { clearInterval(timer); timer = null }
@@ -148,9 +151,10 @@ export function createLiveDirector({ stage, brain = null, config = {}, log = () 
     push,
     start,
     stop,
+    setPaused,
     config: { ...cfg },
     status: () => ({
-      running, speaking, queued: queue.length, readCount, skipped,
+      running, paused, speaking, queued: queue.length, readCount, skipped,
       lastReadAt, lastSpoken, nameCooldowns: recentNames.size,
     }),
   }
