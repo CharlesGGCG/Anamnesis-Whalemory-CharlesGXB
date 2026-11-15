@@ -768,6 +768,7 @@ function toast(text, kind = 'info', ttl = 4200) {
   let currentRoom = 'whale'
   let loungeTimer = null
   let loungeCount = 0
+  let loungeKey = ''
 
   function setAvatar(room) {
     const av1 = $('head-avatar')
@@ -801,6 +802,7 @@ function toast(text, kind = 'info', ttl = 4200) {
   function stopLounge() {
     if (loungeTimer) { clearInterval(loungeTimer); loungeTimer = null }
     loungeCount = 0
+    loungeKey = ''
   }
   async function startLounge() {
     stopLounge()
@@ -811,8 +813,11 @@ function toast(text, kind = 'info', ttl = 4200) {
     try {
       const r = await fetchJson('/api/lounge/messages')
       const list = Array.isArray(r && r.messages) ? r.messages : []
-      if (list.length !== loungeCount || loungeCount === 0) {
+      // 消息超过 100 条后接口只返回最近 100 条，length 恒定 → 必须按最后一条 id 判断
+      const nextKey = list.length ? `${list.length}:${list[list.length - 1].id}` : ''
+      if (nextKey !== loungeKey) {
         loungeCount = list.length
+        loungeKey = nextKey
         $('thread').innerHTML = ''
         for (const m of list) {
           if (m.sender === 'owner') addBubble('me', m.text)
