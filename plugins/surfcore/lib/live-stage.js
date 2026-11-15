@@ -21,6 +21,23 @@ export function createLiveStage({ baseUrl = 'http://127.0.0.1:61945', onLog = ()
     return clients.find((c) => c?.ready && c?.id) || null
   }
 
+  async function recoverStuckVoice() {
+    // L2D 的已知症状：客户端在合成中途掉线，voice 引擎会一直"合成中"，cancel 也只改状态。
+    // 这里先把 queued/synthesizing 的都 cancel 掉，再让调用方重试一次。
+    try {
+      const st = await getState()
+      const stuck = (st.jobs || []).filter((j) => j.speech && ['queued', 'synthesizing'].includes(j.speech.status))
+      for (const j of stuck) {
+        await fetch(`${base}/api/studio/voice/cancel`, {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ id: j.speech.id }), signal: AbortSignal.timeout(5000),
+        }).catch(() => {})
+      }
+      if (stuck.length) onLog(`[live-stage] 清理了 ${stuck.length} 个卡住的语音任务`)
+      return stuck.length
+    } catch { return 0 }
+  }
+
   async function speak(text, { performance = null } = {}) {
     const say = String(text ?? '').trim()
     if (!say) throw new Error('说话内容为空')
@@ -36,7 +53,23 @@ export function createLiveStage({ baseUrl = 'http://127.0.0.1:61945', onLog = ()
       signal: AbortSignal.timeout(15000),
     })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok || data?.error) throw new Error(data?.error || `studio/speak HTTP ${res.status}`)
+    if (!res.ok || data?.error) {
+      const msg = String(data?.error || `studio/speak HTTP ${res.status}`)
+      if (/合成|收尾/.test(msg)) {
+        await recoverStuckVoice()
+        await new Promise((r) => setTimeout(r, 600))
+        const retry = await fetch(`${base}/api/studio/speak`, {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body), signal: AbortSignal.timeout(15000),
+        })
+        const again = await retry.json().catch(() => ({}))
+        if (!retry.ok || again?.error) throw new Error(`${again?.error || msg}（语音引擎可能卡死，需要重启 JingyuServer）`)
+        lastSpeakAt = Date.now()
+        lastError = ''
+        return again
+      }
+      throw new Error(msg)
+    }
     lastSpeakAt = Date.now()
     lastError = ''
     return data

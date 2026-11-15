@@ -81,3 +81,19 @@ live.mjs test --author 晚风 --text "晚上好，能听到吗"
   把「念弹幕 + 她的回复」合成**一次** speak（省一次 TTS）；大脑失败自动退回只念弹幕
 - `live-service` 注入 brain：`chat.chat({ text:'「名」说：内容', live:true, characterId })`
 - 单测扩到 6 组：读+回合成一次、大脑失败降级
+
+### 验证（2026-11-14 19:36）
+
+```text
+live.mjs test --author 晚风 --text "在吗，今天直播效果怎么样"
+→ readCount: 1（2.5s）
+→ lastSpoken: 「晚风」说：在吗，今天直播效果怎么样。在呢在呢，刚开播没多久，效果嘛……我自己觉得还行，你别嫌我话少就好。
+```
+
+**P0.5 通过**：念弹幕 + 她的回复合成一次 speak，语气是人设里的。
+
+### 踩坑：L2D 语音引擎会被「半截合成」卡死
+
+- 症状：`/api/studio/speak` 一直返回 `已有语音正在合成或收尾，请稍候`，`voice/cancel` 只改状态不释放 worker
+- 触发：合成中途 OBS 场景页掉线/重载（client 离线）
+- 处置：重启 `JingyuServer` 清空；`live-stage` 已加**自动清理 + 重试一次**，仍失败会在错误里提示「需要重启 JingyuServer」
