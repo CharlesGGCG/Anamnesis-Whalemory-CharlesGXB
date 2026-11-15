@@ -40,6 +40,9 @@ export function createLiveService({ stateDir, pluginLog = () => {}, config = nul
   let lastError = ''
   let singing = false
   let nowSong = null
+  let songStartedAt = 0
+  let usingLipSync = false
+  let lipSyncId = ''
   let lyricsTimer = null
   let songTimer = null
   let lastLyric = ''
@@ -85,17 +88,40 @@ export function createLiveService({ stateDir, pluginLog = () => {}, config = nul
       const audio = path.isAbsolute(s.audio) ? s.audio : path.join(liveDir, s.audio)
       const lrcFile = s.lrc ? (path.isAbsolute(s.lrc) ? s.lrc : path.join(liveDir, s.lrc)) : ''
       const lrc = lrcFile && fs.existsSync(lrcFile) ? parseLrc(fs.readFileSync(lrcFile, 'utf8')) : []
-      await player.play({ file: audio })
-      pluginLog(`[唱歌] 开始《${s.title}》`)
+      let lipId = ''
+      try {
+        const prep = await player.prepareLipSync(audio)
+        lipId = prep.id
+        lipSyncId = lipId
+        await player.playLipSync(lipId)
+        usingLipSync = true
+      } catch (error) {
+        usingLipSync = false
+        pluginLog('[唱歌] 口型同步不可用，退回 OBS 媒体源：' + String(error?.message ?? error).slice(0, 120))
+        await player.playMedia(audio)
+      }
+      songStartedAt = Date.now()
+      pluginLog(`[唱歌] 开始《${s.title}》（${usingLipSync ? '口型同步' : 'OBS 媒体源'}）`)
+      if (!lrc.length) await player.setLyrics(`♪ 正在唱：${s.title}`).catch(() => {})
       lyricsTimer = setInterval(async () => {
         try {
-          const st = await player.status()
-          const cursor = Number(st.mediaCursor || 0)
-          const dur = Number(st.mediaDuration || s.duration || 0)
+          let cursor = 0
+          let playing = true
+          let dur = Number(s.duration) || 0
+          if (usingLipSync) {
+            const st = await player.lipSyncStatus()
+            cursor = st.audioTime * 1000
+            playing = st.playing
+          } else {
+            const st = await player.mediaStatus()
+            cursor = Number(st.mediaCursor || 0)
+            dur = Number(st.mediaDuration || dur || 0)
+            const state = String(st.mediaState || '')
+            playing = !(state.endsWith('ENDED') || state.endsWith('STOPPED') || (dur && cursor >= dur - 800))
+          }
           const line = lyricAt(lrc, cursor)
           if (line && line !== lastLyric) { lastLyric = line; await player.setLyrics(line) }
-          const state = String(st.mediaState || '')
-          if (state.endsWith('ENDED') || state.endsWith('STOPPED') || (dur && cursor >= dur - 800)) finishSong()
+          if (!playing && Date.now() - songStartedAt > 2500) finishSong()
         } catch (error) {
           pluginLog('[唱歌] 状态查询失败，结束这首：', String(error?.message ?? error).slice(0, 120))
           finishSong()
@@ -109,6 +135,9 @@ export function createLiveService({ stateDir, pluginLog = () => {}, config = nul
 
   function finishSong() {
     if (lyricsTimer) { clearInterval(lyricsTimer); lyricsTimer = null }
+    if (usingLipSync) void player.stopLipSync()
+    if (lipSyncId) { player.cleanupLipSync?.(lipSyncId); lipSyncId = '' }
+    usingLipSync = false
     queue.done()
     singing = false
     nowSong = null
