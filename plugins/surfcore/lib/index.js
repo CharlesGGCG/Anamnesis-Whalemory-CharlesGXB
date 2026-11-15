@@ -78,6 +78,7 @@ import { createVaultInboxDrain } from './vault-inbox.js';
 import { createDiaryScheduler } from './diary-scheduler.js';
 import { createPetPurposeService } from './pet-purpose.js';
 import { createPetApiService } from './pet-api.js';
+import { createLiveService } from './live-service.js';
 import { createUpdatesService, resumePendingApply } from './updates.js';
 import { BILI_WORKSPACE_TITLE, biliWorkspacePath } from './bili-workspace.js';
 import {
@@ -279,9 +280,13 @@ export function apply(ctx) {
   const diaryScheduler = createDiaryScheduler({ pluginLog });
   diaryScheduler.start();
   const petPurpose = createPetPurposeService({ chat: petChat, tokenBudget, pluginLog, callBridge });
+  // 直播：读弹幕（P0）。config.live.enabled === true 才自动起，默认关。
+  const live = createLiveService({ stateDir: STATE_DIR, pluginLog });
+  try { if (readUnified().config?.live?.enabled === true) void live.start(); } catch {}
   const petApi = createPetApiService({
     chat: petChat,
     purpose: petPurpose,
+    live,
     petService,
     screen: screenObserver,
     stateDir: STATE_DIR,

@@ -30,7 +30,7 @@ const PET_BODY_LIMIT = 256 * 1024;
  * @param {() => string} opts.currentDshUrl   DSH 当前 Web 地址
  * @param {(msg:string, ...args:any[])=>void} [opts.pluginLog]
  */
-export function createPetApiService({ chat, purpose, petService, screen, stateDir, currentDshUrl, pluginLog = () => {}, version = '' }) {
+export function createPetApiService({ chat, purpose, live, petService, screen, stateDir, currentDshUrl, pluginLog = () => {}, version = '' }) {
   const root = path.join(stateDir, 'pet');
   const hostFile = path.join(root, 'host.json');
   let lastHostWrite = 0;
@@ -171,6 +171,15 @@ export function createPetApiService({ chat, purpose, petService, screen, stateDi
       const result = await purpose.run({ force: body.force !== false });
       json(res, result.ok ? 200 : 409, result);
       return;
+    }
+    if (suffix === '/live/status') { json(res, 200, live ? { ok: true, ...live.status() } : { ok: false, error: '直播服务未加载' }); return }
+    if (req.method === 'POST' && suffix === '/live/start') { json(res, live ? await live.start() : { ok: false, error: '直播服务未加载' }); return }
+    if (req.method === 'POST' && suffix === '/live/stop') { json(res, live ? await live.stop() : { ok: false, error: '直播服务未加载' }); return }
+    if (req.method === 'POST' && suffix === '/live/test') {
+      let body = {}
+      try { body = JSON.parse((await readBody(req, PET_BODY_LIMIT)) || '{}') } catch {}
+      json(res, live ? { ok: true, ...(await live.test(body)) } : { ok: false, error: '直播服务未加载' })
+      return
     }
     if (req.method === 'POST' && suffix === '/chat') {
       let body = {};
