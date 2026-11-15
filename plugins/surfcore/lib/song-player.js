@@ -117,6 +117,7 @@ export function createSongPlayer({ sceneName = '', onLog = () => {} } = {}) {
         sceneItemTransform: { positionX: 260, positionY: 900, boundsType: 'OBS_BOUNDS_NONE' },
       })
     }
+    try { if (lyricItem) await call('SetSceneItemIndex', { sceneName: scene, sceneItemId: lyricItem.sceneItemId, sceneItemIndex: 999 }) } catch {}
     const stageItem = find('场景页')
     if (stageItem) {
       await call('SetSceneItemTransform', {
