@@ -398,6 +398,20 @@ function toast(text, kind = 'info', ttl = 4200) {
   let devMode = false
   let identity = 'guest'
 
+  // 页面脚本出错时给个可见提示，别让界面静默卡死
+  window.addEventListener('error', (e) => {
+    try { toast('页面脚本出错：' + (e.message || '未知错误'), 'error') } catch {}
+  })
+
+  async function fetchJson(url, opts = {}, timeoutMs = 12000) {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+    try {
+      const res = await fetch(url, { ...opts, signal: ctrl.signal })
+      return await res.json()
+    } finally { clearTimeout(timer) }
+  }
+
   function avatarFor(characterId) {
     return String(characterId || '') === 'claude' ? '/claude-144.webp' : '/avatar-144.webp'
   }
@@ -795,7 +809,7 @@ function toast(text, kind = 'info', ttl = 4200) {
   }
   async function pollLounge() {
     try {
-      const r = await fetch('/api/lounge/messages').then((x) => x.json())
+      const r = await fetchJson('/api/lounge/messages')
       const list = Array.isArray(r && r.messages) ? r.messages : []
       if (list.length !== loungeCount || loungeCount === 0) {
         loungeCount = list.length
@@ -816,7 +830,7 @@ function toast(text, kind = 'info', ttl = 4200) {
   }
   async function loungeSay(text) {
     try {
-      const r = await fetch('/api/lounge/say', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) }).then((x) => x.json())
+      const r = await fetchJson('/api/lounge/say', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) })
       if (r && r.ok === false) toast(r.error || '这句话没发出去', 'error')
       setTimeout(pollLounge, 600)
     } catch {
