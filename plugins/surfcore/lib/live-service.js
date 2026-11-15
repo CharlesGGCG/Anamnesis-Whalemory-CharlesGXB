@@ -102,7 +102,11 @@ export function createLiveService({ stateDir, pluginLog = () => {}, config = nul
       }
       songStartedAt = Date.now()
       pluginLog(`[唱歌] 开始《${s.title}》（${usingLipSync ? '口型同步' : 'OBS 媒体源'}）`)
-      if (!lrc.length) await player.setLyrics(`♪ 正在唱：${s.title}`).catch(() => {})
+      await player.prepareLyrics().catch(() => {})
+      if (!lrc.length) {
+        lastLyric = `♪ 正在唱：${s.title}`
+        await player.setLyrics(lastLyric).catch(() => {})
+      }
       lyricsTimer = setInterval(async () => {
         try {
           let cursor = 0

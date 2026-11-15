@@ -86,3 +86,32 @@ status playing=true audioTime 1.45 → 3.45 → 5.44
 
 - `bangbangbang - silly funk`（森晓渔 / cover: Zachz Winner，`license: cover`，102 秒），
   音频由 B站 BV1uUxA6tEx8 的 dash 音轨转 44.1k WAV；**没有 LRC**，当前显示「♪ 正在唱：歌名」
+
+## 七、v1.5 收尾：两个运维坑（2026-11-14 22:0x）
+
+### 1) OBS 每次 DSH 重启都被带走
+
+- 根因：`Start-Process` 启动的 obs64 属于 DSH 的 job 对象，DSH 停止时整棵树被回收
+- 处理：改用 **WMI `Win32_Process.Create`** 启动（父进程 WmiPrvSE，不在 job 里）
+  → `scripts/start-obs.ps1`
+
+### 2) 不再需要手动点「启用声音」
+
+- 实测 OBS 的 CEF **允许自动播放**：在 `scene-experiment.mjs` 里给 clean 模式加
+  `setTimeout(()=>audioInit(),1200)` 后，刷新浏览器源即 `audioReady=true`
+- 备份：`scene-experiment.mjs.bak-20261114-autoaudio`；之前点击解锁的补丁保留为兜底
+
+### 3) 歌词兜底（待重启加载）
+
+- 口型路径之前没调 `ensureSources`，歌词源停在旧位置/旧字号；已改为播放前
+  `prepareLyrics()`，并把「♪ 正在唱：歌名」写进 `lastLyric` 以便 status 可见
+
+### 全链路实测
+
+```text
+/live/test "点歌 bangbangbang"
+→ push { ok: true, song: "bangbangbang" }
+→ singing=true playing=bangbangbang - silly funk paused=true
+→ [唱歌] 口型同步播放已开始 / 开始《bangbangbang - silly funk》（口型同步）
+→ 截图：嘴张开（docs/assets/live/lip-open.png）
+```
