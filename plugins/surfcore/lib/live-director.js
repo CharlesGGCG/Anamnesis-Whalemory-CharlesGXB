@@ -42,9 +42,10 @@ export function shouldRead(event, { cfg = {}, recentNames = new Map(), recentDmi
   return { ok: true }
 }
 
-export function createLiveDirector({ stage, config = {}, log = () => {} } = {}) {
+export function createLiveDirector({ stage, brain = null, config = {}, log = () => {} } = {}) {
   const cfg = {
     read: config.read !== false,
+    reply: config.reply !== false,
     minGapMs: Number(config.minGapMs) || 20_000,
     nameGapMs: Number(config.nameGapMs) || 5 * 60_000,
     queueMax: Number(config.queueMax) || 30,
@@ -92,10 +93,23 @@ export function createLiveDirector({ stage, config = {}, log = () => {} } = {}) 
     if (recent.length >= cfg.maxPerMinute) return
     const event = pick()
     if (!event) return
-    const text = formatRead(event)
-    if (!text) { void tick(); return }
+    const readText = formatRead(event)
+    if (!readText) { void tick(); return }
     speaking = true
     try {
+      let reply = ''
+      if (cfg.reply && brain && event.kind === 'danmaku') {
+        try {
+          const r = await Promise.race([
+            brain(event),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('大脑超时')), 20000)),
+          ])
+          reply = String(r?.reply?.text || r?.text || '').trim().slice(0, 160)
+        } catch (error) {
+          log('[直播] 生成回复失败，只念弹幕：' + String(error?.message ?? error).slice(0, 120))
+        }
+      }
+      const text = [readText, reply].filter(Boolean).join('。').slice(0, 280)
       await stage.speak(text)
       lastReadAt = Date.now()
       minuteStamps.push(lastReadAt)

@@ -72,3 +72,12 @@ live.mjs test --author 晚风 --text "晚上好，能听到吗"
 
 - `GET /live/status` 43ms 正常；`POST /live/start|stop|test` 全部超时（`/chat` POST 正常）
 - 已给三个接口加 **12s 超时 + 错误 JSON**（不再无限挂），需要重启插件后验证根因
+
+## 六、P0.5 回弹幕（2026-11-14 19:3x）
+
+- `pet-chat` 新增 `live: true`：不读写私聊历史、不召回私聊图谱/vault、system 换成「直播中回应弹幕」，
+  回复要短、口语、不旁白
+- `live-director` 接 `brain`：选中一条弹幕后先跑一次大脑（20s 超时），
+  把「念弹幕 + 她的回复」合成**一次** speak（省一次 TTS）；大脑失败自动退回只念弹幕
+- `live-service` 注入 brain：`chat.chat({ text:'「名」说：内容', live:true, characterId })`
+- 单测扩到 6 组：读+回合成一次、大脑失败降级

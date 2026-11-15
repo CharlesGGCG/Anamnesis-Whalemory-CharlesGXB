@@ -34,4 +34,29 @@ await new Promise((r) => setTimeout(r, 1600))
 assert.ok(spoken.length >= 1, '应该念出至少一条')
 assert.match(spoken[0], /「a」说：第一条/)
 director.stop()
-console.log('ok live-director: 优先级/格式/过滤/执行 4 组断言通过')
+
+// 5) 带大脑：念弹幕 + 生成回复，合成一句话只调一次 speak
+const spoken2 = []
+const stage2 = { speak: async (x) => { spoken2.push(x) }, _setError: () => {} }
+const brain = async (e) => ({ ok: true, reply: { text: '在呢，晚上好' } })
+const d2 = createLiveDirector({ stage: stage2, brain, config: { minGapMs: 0, nameGapMs: 0, maxPerMinute: 10, reply: true }, log: () => {} })
+d2.start()
+d2.push({ kind: 'danmaku', name: '晚风', text: '在吗', dmid: 'b1' })
+await new Promise((r) => setTimeout(r, 1500))
+assert.equal(spoken2.length, 1, '读+回应该合成一次 speak')
+assert.match(spoken2[0], /「晚风」说：在吗/)
+assert.match(spoken2[0], /在呢，晚上好/)
+d2.stop()
+
+// 6) 大脑失败：退回只念弹幕
+const spoken3 = []
+const stage3 = { speak: async (x) => { spoken3.push(x) }, _setError: () => {} }
+const d3 = createLiveDirector({ stage: stage3, brain: async () => { throw new Error('boom') }, config: { minGapMs: 0, nameGapMs: 0, maxPerMinute: 10, reply: true }, log: () => {} })
+d3.start()
+d3.push({ kind: 'danmaku', name: '小橘', text: '你好', dmid: 'b2' })
+await new Promise((r) => setTimeout(r, 1500))
+assert.equal(spoken3.length, 1)
+assert.equal(spoken3[0], '「小橘」说：你好')
+d3.stop()
+
+console.log('ok live-director: 优先级/格式/过滤/执行/带大脑/降级 6 组断言通过')

@@ -281,7 +281,7 @@ export function apply(ctx) {
   diaryScheduler.start();
   const petPurpose = createPetPurposeService({ chat: petChat, tokenBudget, pluginLog, callBridge });
   // 直播：读弹幕（P0）。config.live.enabled === true 才自动起，默认关。
-  const live = createLiveService({ stateDir: STATE_DIR, pluginLog });
+  const live = createLiveService({ stateDir: STATE_DIR, pluginLog, chat: petChat });
   try { if (readUnified().config?.live?.enabled === true) void live.start(); } catch {}
   const petApi = createPetApiService({
     chat: petChat,

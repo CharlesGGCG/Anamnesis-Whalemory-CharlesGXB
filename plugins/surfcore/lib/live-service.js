@@ -17,11 +17,15 @@ function loadLiveConfig(stateDir) {
   } catch { return {} }
 }
 
-export function createLiveService({ stateDir, pluginLog = () => {}, config = null } = {}) {
+export function createLiveService({ stateDir, pluginLog = () => {}, config = null, chat = null } = {}) {
   const cfg = config || loadLiveConfig(stateDir)
   const room = Number(cfg.room) || 14103983
   const stage = createLiveStage({ baseUrl: String(cfg.stageUrl || 'http://127.0.0.1:61945'), onLog: pluginLog })
-  const director = createLiveDirector({ stage, config: cfg.danmaku || {}, log: pluginLog })
+  const characterId = String(cfg.characterId || '')
+  const brain = chat && typeof chat.chat === 'function'
+    ? (event) => chat.chat({ text: `「${event.name}」说：${event.text}`, identity: 'owner', web: false, live: true, ...(characterId ? { characterId } : {}) })
+    : null
+  const director = createLiveDirector({ stage, brain, config: cfg.danmaku || {}, log: pluginLog })
   const danmaku = createLiveDanmaku({ room, onEvent: (event) => director.push(event), onLog: pluginLog })
   let startedAt = 0
   let lastError = ''
